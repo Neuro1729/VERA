@@ -1,5 +1,7 @@
 package com.example.entitlements.service;
 
+import com.example.entitlements.cache.GrantResolutionCache;
+import com.example.entitlements.cache.ResolutionKey;
 import com.example.entitlements.domain.*;
 import com.example.entitlements.store.TenantRegistry;
 import com.example.entitlements.testutil.TestFixtures;
@@ -13,13 +15,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class EntitlementResolverTest {
     private Tenant tenant;
+    private GrantResolutionCache cache;
     private EntitlementResolver resolver;
 
     @BeforeEach
     void setUp() {
         TenantRegistry registry = new TenantRegistry();
         tenant = TestFixtures.registeredTenant(registry);
-        resolver = new EntitlementResolver();
+        cache = new GrantResolutionCache();
+        resolver = new EntitlementResolver(cache);
     }
 
     @Test
@@ -77,5 +81,52 @@ class EntitlementResolverTest {
     void rejectsUnknownResource() {
         assertThrows(java.util.NoSuchElementException.class,
                 () -> resolver.resolve(tenant, "alice", "missing", "api.requests"));
+    }
+
+    @Test
+    void firstResolutionIsCacheMissAndSecondUsesCachedGrantId() {
+        ResolutionKey key = new ResolutionKey("acme", "alice", "api", "api.requests");
+        assertTrue(cache.get(key).isEmpty());
+
+        ResolvedEntitlement first = resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow();
+        assertEquals("g-eng-quota", first.grant().id());
+        assertEquals(Optional.of("g-eng-quota"), cache.get(key));
+
+        EntitlementGrant nearer = new EntitlementGrant(
+                "g-backend-hidden",
+                new Target(TargetType.SCOPE, "backend"),
+                "api",
+                "api.requests",
+                new QuotaValue(new BigDecimal("1"), "request", QuotaPeriod.MONTHLY));
+        tenant.getGrants().put(nearer.id(), nearer);
+
+        ResolvedEntitlement second = resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow();
+        assertEquals("g-eng-quota", second.grant().id());
+        assertSame(tenant.getGrants().get("g-eng-quota"), second.grant());
+    }
+
+    @Test
+    void staleCachedGrantIdCausesReResolution() {
+        resolver.resolve(tenant, "alice", "api", "api.requests");
+        tenant.getGrants().remove("g-eng-quota");
+
+        ResolvedEntitlement resolved = resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow();
+        assertEquals("g-root-quota", resolved.grant().id());
+        assertEquals(Optional.of("g-root-quota"), cache.get(new ResolutionKey("acme", "alice", "api", "api.requests")));
+    }
+
+    @Test
+    void aliceAndBobMayCacheTheSameEngineeringGrantId() {
+        assertEquals("g-eng-quota", resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
+        assertEquals("g-eng-quota", resolver.resolve(tenant, "bob", "api", "api.requests").orElseThrow().grant().id());
+        assertEquals(Optional.of("g-eng-quota"), cache.get(new ResolutionKey("acme", "alice", "api", "api.requests")));
+        assertEquals(Optional.of("g-eng-quota"), cache.get(new ResolutionKey("acme", "bob", "api", "api.requests")));
+    }
+
+    @Test
+    void differentTenantsNeverCollide() {
+        cache.put(new ResolutionKey("other", "alice", "api", "api.requests"), "foreign-grant");
+        assertEquals("g-eng-quota", resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
+        assertEquals(Optional.of("foreign-grant"), cache.get(new ResolutionKey("other", "alice", "api", "api.requests")));
     }
 }

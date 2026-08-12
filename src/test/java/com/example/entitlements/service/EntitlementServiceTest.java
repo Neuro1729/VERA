@@ -1,5 +1,6 @@
 package com.example.entitlements.service;
 
+import com.example.entitlements.cache.GrantResolutionCache;
 import com.example.entitlements.request.EvaluationRequest;
 import com.example.entitlements.request.EvaluationResult;
 import com.example.entitlements.store.TenantRegistry;
@@ -26,7 +27,7 @@ class EntitlementServiceTest {
         TestFixtures.registeredTenant(registry);
         UsageStore usageStore = new UsageStore();
         MutableClock clock = new MutableClock(Instant.parse("2026-08-12T12:00:00Z"));
-        EntitlementResolver resolver = new EntitlementResolver();
+        EntitlementResolver resolver = new EntitlementResolver(new GrantResolutionCache());
         usageService = new UsageService(registry, usageStore, resolver, clock);
         service = new EntitlementService(registry, resolver, usageService, clock);
         mapper = new ObjectMapper();

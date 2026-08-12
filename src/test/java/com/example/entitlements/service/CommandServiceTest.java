@@ -1,5 +1,8 @@
 package com.example.entitlements.service;
 
+import com.example.entitlements.cache.GrantResolutionCache;
+import com.example.entitlements.cache.ResolutionCacheInvalidator;
+import com.example.entitlements.cache.ResolutionKey;
 import com.example.entitlements.domain.*;
 import com.example.entitlements.request.CommandRequest;
 import com.example.entitlements.request.CommandType;
@@ -12,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -21,6 +25,8 @@ class CommandServiceTest {
     private Tenant tenant;
     private CommandService service;
     private ObjectMapper mapper;
+    private GrantResolutionCache cache;
+    private EntitlementResolver resolver;
 
     @BeforeEach
     void setUp() {
@@ -28,7 +34,10 @@ class CommandServiceTest {
         usageStore = new UsageStore();
         tenant = TestFixtures.registeredTenant(registry);
         mapper = new ObjectMapper();
-        service = new CommandService(registry, usageStore, mapper);
+        cache = new GrantResolutionCache();
+        ResolutionCacheInvalidator invalidator = new ResolutionCacheInvalidator(cache);
+        service = new CommandService(registry, usageStore, mapper, cache, invalidator);
+        resolver = new EntitlementResolver(cache);
     }
 
     @Test
@@ -87,7 +96,6 @@ class CommandServiceTest {
 
     @Test
     void movingSubjectImmediatelyChangesInheritedEntitlement() throws Exception {
-        EntitlementResolver resolver = new EntitlementResolver();
         assertEquals("g-eng-quota", resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
         execute("MOVE_SUBJECT", "{\"subjectId\":\"alice\",\"newScopeId\":\"marketing\"}");
         assertEquals("g-root-quota", resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
@@ -111,21 +119,21 @@ class CommandServiceTest {
     @Test
     void setEntitlementCreatesNearestOverride() throws Exception {
         execute("SET_ENTITLEMENT", "{\"grantId\":\"g-backend\",\"target\":{\"type\":\"SCOPE\",\"id\":\"backend\"},\"resourceId\":\"api\",\"entitlementKey\":\"api.requests\",\"value\":{\"type\":\"QUOTA\",\"limit\":2000000,\"unit\":\"request\",\"period\":\"MONTHLY\"}}");
-        assertEquals("g-backend", new EntitlementResolver().resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
+        assertEquals("g-backend", resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
     }
 
     @Test
     void setEntitlementReplacesSameTargetResourceAndKey() throws Exception {
         execute("SET_ENTITLEMENT", "{\"grantId\":\"replacement\",\"target\":{\"type\":\"SCOPE\",\"id\":\"engineering\"},\"resourceId\":\"api\",\"entitlementKey\":\"api.requests\",\"value\":{\"type\":\"QUOTA\",\"limit\":2500000,\"unit\":\"request\",\"period\":\"MONTHLY\"}}");
         assertFalse(tenant.getGrants().containsKey("g-eng-quota"));
-        assertEquals("replacement", new EntitlementResolver().resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
+        assertEquals("replacement", resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
     }
 
     @Test
     void removeEntitlementFallsBackToParent() throws Exception {
         execute("SET_ENTITLEMENT", "{\"grantId\":\"backend-x\",\"target\":{\"type\":\"SCOPE\",\"id\":\"backend\"},\"resourceId\":\"api\",\"entitlementKey\":\"api.requests\",\"value\":{\"type\":\"QUOTA\",\"limit\":50,\"unit\":\"request\",\"period\":\"MONTHLY\"}}");
         execute("REMOVE_ENTITLEMENT", "{\"target\":{\"type\":\"SCOPE\",\"id\":\"backend\"},\"resourceId\":\"api\",\"entitlementKey\":\"api.requests\"}");
-        assertEquals("g-eng-quota", new EntitlementResolver().resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
+        assertEquals("g-eng-quota", resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
     }
 
     @Test
@@ -138,6 +146,94 @@ class CommandServiceTest {
     @Test
     void resourceUpdateCannotInvalidateExistingGrantDefinitions() {
         assertThrows(IllegalArgumentException.class, () -> execute("UPDATE_RESOURCE", "{\"resourceId\":\"api\",\"entitlementDefinitions\":[]}"));
+    }
+
+    @Test
+    void addingNearerScopeGrantInvalidatesOnlyThatResourceKeyForDescendants() throws Exception {
+        resolver.resolve(tenant, "alice", "api", "api.requests");
+        resolver.resolve(tenant, "alice", "api", "api.maxBatch");
+        resolver.resolve(tenant, "eve", "api", "api.requests");
+
+        execute("SET_ENTITLEMENT", "{\"grantId\":\"g-backend\",\"target\":{\"type\":\"SCOPE\",\"id\":\"backend\"},\"resourceId\":\"api\",\"entitlementKey\":\"api.requests\",\"value\":{\"type\":\"QUOTA\",\"limit\":2000000,\"unit\":\"request\",\"period\":\"MONTHLY\"}}");
+
+        assertTrue(cache.get(new ResolutionKey("acme", "alice", "api", "api.requests")).isEmpty());
+        assertEquals(Optional.of("g-batch"), cache.get(new ResolutionKey("acme", "alice", "api", "api.maxBatch")));
+        assertEquals(Optional.of("g-root-quota"), cache.get(new ResolutionKey("acme", "eve", "api", "api.requests")));
+        assertEquals("g-backend", resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
+    }
+
+    @Test
+    void removingNearerGrantCausesDescendantsToResolveToParentAgain() throws Exception {
+        execute("SET_ENTITLEMENT", "{\"grantId\":\"backend-x\",\"target\":{\"type\":\"SCOPE\",\"id\":\"backend\"},\"resourceId\":\"api\",\"entitlementKey\":\"api.requests\",\"value\":{\"type\":\"QUOTA\",\"limit\":50,\"unit\":\"request\",\"period\":\"MONTHLY\"}}");
+        assertEquals("backend-x", resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
+
+        execute("REMOVE_ENTITLEMENT", "{\"target\":{\"type\":\"SCOPE\",\"id\":\"backend\"},\"resourceId\":\"api\",\"entitlementKey\":\"api.requests\"}");
+        assertEquals("g-eng-quota", resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
+    }
+
+    @Test
+    void moveSubjectInvalidatesOnlyMovedSubjectCache() throws Exception {
+        resolver.resolve(tenant, "alice", "api", "api.requests");
+        resolver.resolve(tenant, "bob", "api", "api.requests");
+
+        execute("MOVE_SUBJECT", "{\"subjectId\":\"alice\",\"newScopeId\":\"marketing\"}");
+
+        assertTrue(cache.get(new ResolutionKey("acme", "alice", "api", "api.requests")).isEmpty());
+        assertEquals(Optional.of("g-eng-quota"), cache.get(new ResolutionKey("acme", "bob", "api", "api.requests")));
+    }
+
+    @Test
+    void moveScopeInvalidatesAllSubjectsInMovedSubtree() throws Exception {
+        resolver.resolve(tenant, "alice", "api", "api.requests");
+        resolver.resolve(tenant, "bob", "api", "api.requests");
+        resolver.resolve(tenant, "charlie", "api", "api.requests");
+
+        execute("MOVE_SCOPE", "{\"scopeId\":\"backend\",\"newParentScopeId\":\"marketing\"}");
+
+        assertTrue(cache.get(new ResolutionKey("acme", "alice", "api", "api.requests")).isEmpty());
+        assertTrue(cache.get(new ResolutionKey("acme", "bob", "api", "api.requests")).isEmpty());
+        assertEquals(Optional.of("g-eng-quota"), cache.get(new ResolutionKey("acme", "charlie", "api", "api.requests")));
+    }
+
+    @Test
+    void addingEmptyScopeDoesNotInvalidateUnrelatedCacheEntries() throws Exception {
+        resolver.resolve(tenant, "alice", "api", "api.requests");
+        int size = cache.size();
+        execute("ADD_SCOPE", "{\"parentScopeId\":\"engineering\",\"scope\":{\"id\":\"data\",\"kind\":\"team\",\"name\":\"Data\"}}");
+        assertEquals(size, cache.size());
+        assertEquals(Optional.of("g-eng-quota"), cache.get(new ResolutionKey("acme", "alice", "api", "api.requests")));
+    }
+
+    @Test
+    void updatingScopeNameDoesNotInvalidateEntitlementCache() throws Exception {
+        resolver.resolve(tenant, "alice", "api", "api.requests");
+        execute("UPDATE_SCOPE", "{\"scopeId\":\"engineering\",\"name\":\"Eng Renamed\"}");
+        assertEquals(Optional.of("g-eng-quota"), cache.get(new ResolutionKey("acme", "alice", "api", "api.requests")));
+    }
+
+    @Test
+    void removingResourceInvalidatesThatResourcesCachedResolutions() throws Exception {
+        resolver.resolve(tenant, "alice", "api", "api.requests");
+        resolver.resolve(tenant, "alice", "api", "api.maxBatch");
+        execute("REMOVE_RESOURCE", "{\"resourceId\":\"api\"}");
+        assertTrue(cache.get(new ResolutionKey("acme", "alice", "api", "api.requests")).isEmpty());
+        assertTrue(cache.get(new ResolutionKey("acme", "alice", "api", "api.maxBatch")).isEmpty());
+    }
+
+    @Test
+    void invalidationSucceedsWhenAffectedSubjectHasNoCachedEntries() throws Exception {
+        assertDoesNotThrow(() -> execute(
+                "SET_ENTITLEMENT",
+                "{\"grantId\":\"g-backend\",\"target\":{\"type\":\"SCOPE\",\"id\":\"backend\"},\"resourceId\":\"api\",\"entitlementKey\":\"api.requests\",\"value\":{\"type\":\"QUOTA\",\"limit\":2000000,\"unit\":\"request\",\"period\":\"MONTHLY\"}}"
+        ));
+        assertEquals(0, cache.size());
+    }
+
+    @Test
+    void financeChangeDoesNotInvalidateEngineeringSubjects() throws Exception {
+        resolver.resolve(tenant, "alice", "api", "api.requests");
+        execute("SET_ENTITLEMENT", "{\"grantId\":\"g-mkt\",\"target\":{\"type\":\"SCOPE\",\"id\":\"marketing\"},\"resourceId\":\"api\",\"entitlementKey\":\"api.requests\",\"value\":{\"type\":\"QUOTA\",\"limit\":10,\"unit\":\"request\",\"period\":\"MONTHLY\"}}");
+        assertEquals(Optional.of("g-eng-quota"), cache.get(new ResolutionKey("acme", "alice", "api", "api.requests")));
     }
 
     private void execute(String type, String payload) throws Exception {

@@ -1,5 +1,7 @@
 package com.example.entitlements.service;
 
+import com.example.entitlements.cache.GrantResolutionCache;
+import com.example.entitlements.cache.ResolutionCacheInvalidator;
 import com.example.entitlements.domain.*;
 import com.example.entitlements.request.CommandRequest;
 import com.example.entitlements.request.CommandResult;
@@ -16,11 +18,21 @@ public class CommandService {
     private final TenantRegistry registry;
     private final UsageStore usageStore;
     private final ObjectMapper objectMapper;
+    private final GrantResolutionCache cache;
+    private final ResolutionCacheInvalidator invalidator;
 
-    public CommandService(TenantRegistry registry, UsageStore usageStore, ObjectMapper objectMapper) {
+    public CommandService(
+            TenantRegistry registry,
+            UsageStore usageStore,
+            ObjectMapper objectMapper,
+            GrantResolutionCache cache,
+            ResolutionCacheInvalidator invalidator
+    ) {
         this.registry = registry;
         this.usageStore = usageStore;
         this.objectMapper = objectMapper;
+        this.cache = cache;
+        this.invalidator = invalidator;
     }
 
     public CommandResult execute(CommandRequest request) {
@@ -72,6 +84,8 @@ public class CommandService {
         Scope scope = requiredScope(tenant, payload.scopeId());
         if (scope.getId().equals(tenant.getRootScopeId())) throw new IllegalArgumentException("root scope cannot be removed");
 
+        invalidator.invalidateScopeSubtree(tenant, scope.getId());
+
         Set<String> scopeIds = new LinkedHashSet<>();
         collectScopeIds(tenant, scope.getId(), scopeIds);
         Set<String> subjectIds = new LinkedHashSet<>();
@@ -104,6 +118,7 @@ public class CommandService {
         oldParent.removeChild(scope.getId());
         newParent.addChild(scope.getId());
         scope.setParentScopeId(newParent.getId());
+        invalidator.invalidateScopeSubtree(tenant, scope.getId());
         return ok("scope moved: " + scope.getId());
     }
 
@@ -127,6 +142,7 @@ public class CommandService {
 
     private CommandResult removeSubject(Tenant tenant, RemoveSubject payload) {
         Subject subject = requiredSubject(tenant, payload.subjectId());
+        cache.invalidateSubject(tenant.getId(), subject.getId());
         requiredScope(tenant, subject.getScopeId()).removeSubject(subject.getId());
         tenant.getSubjects().remove(subject.getId());
         Set<String> removedGrantIds = new HashSet<>();
@@ -146,6 +162,7 @@ public class CommandService {
         oldScope.removeSubject(subject.getId());
         newScope.addSubject(subject.getId());
         subject.setScopeId(newScope.getId());
+        cache.invalidateSubject(tenant.getId(), subject.getId());
         return ok("subject moved: " + subject.getId());
     }
 
@@ -164,8 +181,9 @@ public class CommandService {
         if (payload.metadata() != null) metadata.putAll(payload.metadata());
         Map<String, EntitlementValue> properties = new LinkedHashMap<>(current.properties());
         if (payload.properties() != null) properties.putAll(payload.properties());
-        List<EntitlementDefinition> definitions = payload.entitlementDefinitions() == null
-                ? current.entitlementDefinitions() : payload.entitlementDefinitions();
+        boolean definitionsChanged = payload.entitlementDefinitions() != null;
+        List<EntitlementDefinition> definitions = definitionsChanged
+                ? payload.entitlementDefinitions() : current.entitlementDefinitions();
 
         Resource updated = new Resource(
                 current.id(),
@@ -185,11 +203,15 @@ public class CommandService {
             }
         }
         tenant.getResources().put(updated.id(), updated);
+        if (definitionsChanged) {
+            cache.invalidateResource(tenant.getId(), updated.id());
+        }
         return ok("resource updated: " + updated.id());
     }
 
     private CommandResult removeResource(Tenant tenant, RemoveResource payload) {
         requiredResource(tenant, payload.resourceId());
+        cache.invalidateResource(tenant.getId(), payload.resourceId());
         tenant.getResources().remove(payload.resourceId());
         Set<String> removedGrantIds = new HashSet<>();
         tenant.getGrants().values().removeIf(grant -> {
@@ -214,6 +236,7 @@ public class CommandService {
         EntitlementGrant idCollision = tenant.getGrants().get(id);
         if (idCollision != null) throw new IllegalArgumentException("grant id already exists: " + id);
         tenant.getGrants().put(grant.id(), grant);
+        invalidateEntitlementTarget(tenant, grant.target(), grant.resourceId(), grant.entitlementKey());
         return ok(existing == null ? "entitlement created: " + grant.id() : "entitlement replaced: " + grant.id());
     }
 
@@ -222,7 +245,16 @@ public class CommandService {
         if (existing == null) throw new NoSuchElementException("entitlement grant not found");
         tenant.getGrants().remove(existing.id());
         usageStore.remove(existing.id());
+        invalidateEntitlementTarget(tenant, payload.target(), payload.resourceId(), payload.entitlementKey());
         return ok("entitlement removed: " + existing.id());
+    }
+
+    private void invalidateEntitlementTarget(Tenant tenant, Target target, String resourceId, String entitlementKey) {
+        if (target.type() == TargetType.SUBJECT) {
+            cache.invalidateSubjectEntitlement(tenant.getId(), target.id(), resourceId, entitlementKey);
+        } else {
+            invalidator.invalidateScopeEntitlement(tenant, target.id(), resourceId, entitlementKey);
+        }
     }
 
     private Scope requiredScope(Tenant tenant, String id) {

@@ -1,5 +1,7 @@
 package com.example.entitlements.service;
 
+import com.example.entitlements.cache.GrantResolutionCache;
+import com.example.entitlements.cache.ResolutionKey;
 import com.example.entitlements.domain.*;
 import com.example.entitlements.request.ConsumptionRequest;
 import com.example.entitlements.request.ConsumptionResult;
@@ -21,6 +23,7 @@ class UsageServiceTest {
     private Tenant tenant;
     private MutableClock clock;
     private UsageService service;
+    private GrantResolutionCache cache;
 
     @BeforeEach
     void setUp() {
@@ -28,7 +31,8 @@ class UsageServiceTest {
         usageStore = new UsageStore();
         tenant = TestFixtures.registeredTenant(registry);
         clock = new MutableClock(Instant.parse("2026-08-12T12:00:00Z"));
-        service = new UsageService(registry, usageStore, new EntitlementResolver(), clock);
+        cache = new GrantResolutionCache();
+        service = new UsageService(registry, usageStore, new EntitlementResolver(cache), clock);
     }
 
     @Test
@@ -127,5 +131,28 @@ class UsageServiceTest {
     void missingEntitlementCannotBeConsumed() {
         assertThrows(java.util.NoSuchElementException.class,
                 () -> service.consume(new ConsumptionRequest("acme", "alice", "gpu", "gpu.hours", BigDecimal.ONE)));
+    }
+
+    @Test
+    void usageRemainsSharedByGrantIdAfterCacheHits() {
+        ConsumptionResult first = service.consume(new ConsumptionRequest("acme", "alice", "api", "api.requests", new BigDecimal("100")));
+        assertEquals("g-eng-quota", cache.get(new ResolutionKey("acme", "alice", "api", "api.requests")).orElseThrow());
+
+        ConsumptionResult second = service.consume(new ConsumptionRequest("acme", "bob", "api", "api.requests", new BigDecimal("50")));
+        assertEquals("g-eng-quota", second.grantId());
+        assertEquals(new BigDecimal("150"), second.consumed());
+        assertEquals(new BigDecimal("999850"), second.remaining());
+        assertEquals(first.grantId(), second.grantId());
+    }
+
+    @Test
+    void repeatedConsumptionStillReadsLatestUsageAndNeverCachesRemaining() {
+        service.consume(new ConsumptionRequest("acme", "alice", "api", "api.requests", new BigDecimal("100")));
+        ConsumptionResult again = service.consume(new ConsumptionRequest("acme", "alice", "api", "api.requests", new BigDecimal("25")));
+
+        assertEquals(new BigDecimal("125"), again.consumed());
+        assertEquals(new BigDecimal("999875"), again.remaining());
+        assertEquals("g-eng-quota", cache.get(new ResolutionKey("acme", "alice", "api", "api.requests")).orElseThrow());
+        assertEquals(1, cache.size());
     }
 }

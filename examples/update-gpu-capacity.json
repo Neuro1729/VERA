@@ -1,0 +1,14 @@
+{
+  "type": "UPDATE_RESOURCE",
+  "tenantId": "acme",
+  "payload": {
+    "resourceId": "gpu",
+    "properties": {
+      "capacity": {
+        "type": "QUANTITY",
+        "value": 150,
+        "unit": "gpu"
+      }
+    }
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "tenant": {
+    "id": "acme",
+    "name": "Acme Corp"
+  },
+  "structure": {
+    "id": "root",
+    "kind": "company",
+    "name": "Acme",
+    "children": [
+      {
+        "id": "engineering",
+        "kind": "department",
+        "name": "Engineering",
+        "children": [
+          {
+            "id": "backend",
+            "kind": "team",
+            "name": "Backend",
+            "subjects": [
+              {"id": "alice", "kind": "employee", "name": "Alice"},
+              {"id": "bob", "kind": "employee", "name": "Bob"}
+            ]
+          },
+          {
+            "id": "ml",
+            "kind": "team",
+            "name": "Machine Learning",
+            "subjects": [
+              {"id": "charlie", "kind": "researcher", "name": "Charlie"}
+            ]
+          }
+        ]
+      },
+      {
+        "id": "marketing",
+        "kind": "department",
+        "name": "Marketing",
+        "subjects": [
+          {"id": "eve", "kind": "employee", "name": "Eve"}
+        ]
+      }
+    ]
+  },
+  "resources": [
+    {
+      "id": "api",
+      "kind": "api",
+      "name": "AI API",
+      "metadata": {"provider": "example"},
+      "properties": {
+        "totalCapacity": {
+          "type": "QUOTA",
+          "limit": 10000000,
+          "unit": "request",
+          "period": "MONTHLY"
+        }
+      },
+      "entitlementDefinitions": [
+        {"key": "api.enabled", "name": "API Enabled", "valueType": "BOOLEAN"},
+        {"key": "api.requests", "name": "API Requests", "valueType": "QUOTA"},
+        {"key": "api.maxBatch", "name": "Max Batch", "valueType": "QUANTITY"},
+        {"key": "api.models", "name": "Allowed Models", "valueType": "SET"}
+      ]
+    },
+    {
+      "id": "gpu",
+      "kind": "compute",
+      "name": "GPU Cluster",
+      "properties": {
+        "capacity": {"type": "QUANTITY", "value": 100, "unit": "gpu"}
+      },
+      "entitlementDefinitions": [
+        {"key": "gpu.enabled", "name": "GPU Enabled", "valueType": "BOOLEAN"},
+        {"key": "gpu.hours", "name": "GPU Hours", "valueType": "QUOTA"}
+      ]
+    }
+  ],
+  "grants": [
+    {
+      "id": "root-enabled",
+      "target": {"type": "SCOPE", "id": "root"},
+      "resourceId": "api",
+      "entitlementKey": "api.enabled",
+      "value": {"type": "BOOLEAN", "value": true}
+    },
+    {
+      "id": "root-api",
+      "target": {"type": "SCOPE", "id": "root"},
+      "resourceId": "api",
+      "entitlementKey": "api.requests",
+      "value": {"type": "QUOTA", "limit": 100000, "unit": "request", "period": "MONTHLY"}
+    },
+    {
+      "id": "engineering-api",
+      "target": {"type": "SCOPE", "id": "engineering"},
+      "resourceId": "api",
+      "entitlementKey": "api.requests",
+      "value": {"type": "QUOTA", "limit": 1000000, "unit": "request", "period": "MONTHLY"}
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "tenantId": "acme",
+  "subjectId": "alice",
+  "resourceId": "api",
+  "entitlementKey": "api.requests",
+  "requestedValue": 500
+}

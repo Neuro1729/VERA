@@ -1,0 +1,16 @@
+{
+  "type": "SET_ENTITLEMENT",
+  "tenantId": "acme",
+  "payload": {
+    "grantId": "backend-api",
+    "target": {"type": "SCOPE", "id": "backend"},
+    "resourceId": "api",
+    "entitlementKey": "api.requests",
+    "value": {
+      "type": "QUOTA",
+      "limit": 2000000,
+      "unit": "request",
+      "period": "MONTHLY"
+    }
+  }
+}

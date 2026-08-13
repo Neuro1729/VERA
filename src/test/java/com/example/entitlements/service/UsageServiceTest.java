@@ -52,7 +52,7 @@ class UsageServiceTest {
     void subjectOverrideUsesItsOwnUsagePool() {
         EntitlementGrant personal = new EntitlementGrant("g-alice-personal", new Target(TargetType.SUBJECT, "alice"), "api", "api.requests",
                 new QuotaValue(new BigDecimal("500"), "request", QuotaPeriod.MONTHLY));
-        tenant.getGrants().put(personal.id(), personal);
+        tenant.putGrant(personal);
 
         ConsumptionResult alice = service.consume(new ConsumptionRequest("acme", "alice", "api", "api.requests", new BigDecimal("100")));
         ConsumptionResult bob = service.consume(new ConsumptionRequest("acme", "bob", "api", "api.requests", new BigDecimal("100")));
@@ -97,7 +97,7 @@ class UsageServiceTest {
     void yearlyQuotaUsesCalendarYearBoundaries() {
         EntitlementGrant yearly = new EntitlementGrant("yearly", new Target(TargetType.SUBJECT, "alice"), "gpu", "gpu.hours",
                 new QuotaValue(new BigDecimal("100"), "hour", QuotaPeriod.YEARLY));
-        tenant.getGrants().put(yearly.id(), yearly);
+        tenant.putGrant(yearly);
 
         ConsumptionResult first = service.consume(new ConsumptionRequest("acme", "alice", "gpu", "gpu.hours", new BigDecimal("90")));
         clock.setInstant(Instant.parse("2027-01-01T00:00:00Z"));

@@ -43,7 +43,7 @@ class EntitlementResolverTest {
     void subjectGrantWinsOverEveryScopeGrant() {
         EntitlementGrant personal = new EntitlementGrant("g-alice", new Target(TargetType.SUBJECT, "alice"), "api", "api.requests",
                 new QuotaValue(new BigDecimal("9000000"), "request", QuotaPeriod.MONTHLY));
-        tenant.getGrants().put(personal.id(), personal);
+        tenant.putGrant(personal);
 
         ResolvedEntitlement resolved = resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow();
         assertEquals("g-alice", resolved.grant().id());
@@ -53,7 +53,7 @@ class EntitlementResolverTest {
     void childScopeGrantWinsOverParentScopeGrant() {
         EntitlementGrant backend = new EntitlementGrant("g-backend", new Target(TargetType.SCOPE, "backend"), "api", "api.requests",
                 new QuotaValue(new BigDecimal("2000000"), "request", QuotaPeriod.MONTHLY));
-        tenant.getGrants().put(backend.id(), backend);
+        tenant.putGrant(backend);
 
         assertEquals("g-backend", resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow().grant().id());
         assertEquals("g-eng-quota", resolver.resolve(tenant, "charlie", "api", "api.requests").orElseThrow().grant().id());
@@ -98,7 +98,7 @@ class EntitlementResolverTest {
                 "api",
                 "api.requests",
                 new QuotaValue(new BigDecimal("1"), "request", QuotaPeriod.MONTHLY));
-        tenant.getGrants().put(nearer.id(), nearer);
+        tenant.putGrant(nearer);
 
         ResolvedEntitlement second = resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow();
         assertEquals("g-eng-quota", second.grant().id());
@@ -108,7 +108,7 @@ class EntitlementResolverTest {
     @Test
     void staleCachedGrantIdCausesReResolution() {
         resolver.resolve(tenant, "alice", "api", "api.requests");
-        tenant.getGrants().remove("g-eng-quota");
+        tenant.removeGrant("g-eng-quota");
 
         ResolvedEntitlement resolved = resolver.resolve(tenant, "alice", "api", "api.requests").orElseThrow();
         assertEquals("g-root-quota", resolved.grant().id());

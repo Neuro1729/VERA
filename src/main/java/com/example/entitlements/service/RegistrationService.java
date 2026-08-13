@@ -39,9 +39,10 @@ public class RegistrationService {
             if (ModelValidation.findExactGrant(tenant, grant.target(), grant.resourceId(), grant.entitlementKey()) != null) {
                 throw new IllegalArgumentException("duplicate grant for target/resource/entitlement");
             }
-            if (tenant.getGrants().putIfAbsent(grant.id(), grant) != null) {
+            if (tenant.getGrants().containsKey(grant.id())) {
                 throw new IllegalArgumentException("duplicate grant id: " + grant.id());
             }
+            tenant.putGrant(grant);
         }
 
         registry.register(tenant);

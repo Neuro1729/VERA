@@ -39,11 +39,6 @@ final class ModelValidation {
     }
 
     static EntitlementGrant findExactGrant(Tenant tenant, Target target, String resourceId, String entitlementKey) {
-        return tenant.getGrants().values().stream()
-                .filter(grant -> grant.target().equals(target))
-                .filter(grant -> grant.resourceId().equals(resourceId))
-                .filter(grant -> grant.entitlementKey().equals(entitlementKey))
-                .findFirst()
-                .orElse(null);
+        return tenant.findGrant(target, resourceId, entitlementKey).orElse(null);
     }
 }

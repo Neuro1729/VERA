@@ -97,17 +97,14 @@ public class CommandService {
         Scope parent = requiredScope(tenant, scope.getParentScopeId());
         parent.removeChild(scope.getId());
 
-        Set<String> removedGrantIds = new HashSet<>();
-        tenant.getGrants().values().removeIf(grant -> {
-            boolean remove = (grant.target().type() == TargetType.SCOPE && scopeIds.contains(grant.target().id()))
-                    || (grant.target().type() == TargetType.SUBJECT && subjectIds.contains(grant.target().id()));
-            if (remove) removedGrantIds.add(grant.id());
-            return remove;
-        });
-        removedGrantIds.forEach(grantId -> {
-            usageStore.remove(grantId);
-            rateLimitService.removeBucket(tenant.getId(), grantId);
-        });
+        List<String> removedGrantIds = tenant.getGrants().values().stream()
+                .filter(grant ->
+                        (grant.target().type() == TargetType.SCOPE && scopeIds.contains(grant.target().id()))
+                                || (grant.target().type() == TargetType.SUBJECT && subjectIds.contains(grant.target().id())))
+                .map(EntitlementGrant::id)
+                .toList();
+        removedGrantIds.forEach(grantId -> purgeGrant(tenant, grantId));
+
         subjectIds.forEach(tenant.getSubjects()::remove);
         scopeIds.forEach(tenant.getScopes()::remove);
         return ok("scope subtree removed: " + payload.scopeId());
@@ -151,16 +148,11 @@ public class CommandService {
         cache.invalidateSubject(tenant.getId(), subject.getId());
         requiredScope(tenant, subject.getScopeId()).removeSubject(subject.getId());
         tenant.getSubjects().remove(subject.getId());
-        Set<String> removedGrantIds = new HashSet<>();
-        tenant.getGrants().values().removeIf(grant -> {
-            boolean remove = grant.target().type() == TargetType.SUBJECT && grant.target().id().equals(subject.getId());
-            if (remove) removedGrantIds.add(grant.id());
-            return remove;
-        });
-        removedGrantIds.forEach(grantId -> {
-            usageStore.remove(grantId);
-            rateLimitService.removeBucket(tenant.getId(), grantId);
-        });
+        List<String> removedGrantIds = tenant.getGrants().values().stream()
+                .filter(grant -> grant.target().type() == TargetType.SUBJECT && grant.target().id().equals(subject.getId()))
+                .map(EntitlementGrant::id)
+                .toList();
+        removedGrantIds.forEach(grantId -> purgeGrant(tenant, grantId));
         return ok("subject removed: " + subject.getId());
     }
 
@@ -222,16 +214,11 @@ public class CommandService {
         requiredResource(tenant, payload.resourceId());
         cache.invalidateResource(tenant.getId(), payload.resourceId());
         tenant.getResources().remove(payload.resourceId());
-        Set<String> removedGrantIds = new HashSet<>();
-        tenant.getGrants().values().removeIf(grant -> {
-            boolean remove = grant.resourceId().equals(payload.resourceId());
-            if (remove) removedGrantIds.add(grant.id());
-            return remove;
-        });
-        removedGrantIds.forEach(grantId -> {
-            usageStore.remove(grantId);
-            rateLimitService.removeBucket(tenant.getId(), grantId);
-        });
+        List<String> removedGrantIds = tenant.getGrants().values().stream()
+                .filter(grant -> grant.resourceId().equals(payload.resourceId()))
+                .map(EntitlementGrant::id)
+                .toList();
+        removedGrantIds.forEach(grantId -> purgeGrant(tenant, grantId));
         return ok("resource removed: " + payload.resourceId());
     }
 
@@ -241,15 +228,24 @@ public class CommandService {
         ModelValidation.validateGrant(tenant, grant);
 
         EntitlementGrant existing = ModelValidation.findExactGrant(tenant, grant.target(), grant.resourceId(), grant.entitlementKey());
+        boolean preservedRuntime = false;
         if (existing != null) {
-            tenant.getGrants().remove(existing.id());
-            usageStore.remove(existing.id());
-            rateLimitService.removeBucket(tenant.getId(), existing.id());
+            boolean sameId = existing.id().equals(grant.id());
+            boolean material = isMaterialRuntimeChange(existing.value(), grant.value());
+            tenant.removeGrant(existing.id());
+            if (!sameId || material) {
+                usageStore.remove(existing.id());
+                rateLimitService.removeBucket(tenant.getId(), existing.id());
+            } else {
+                preservedRuntime = true;
+            }
         }
-        EntitlementGrant idCollision = tenant.getGrants().get(id);
-        if (idCollision != null) throw new IllegalArgumentException("grant id already exists: " + id);
-        tenant.getGrants().put(grant.id(), grant);
-        if (grant.value() instanceof RateLimitValue) {
+
+        if (tenant.getGrants().containsKey(id)) {
+            throw new IllegalArgumentException("grant id already exists: " + id);
+        }
+        tenant.putGrant(grant);
+        if (grant.value() instanceof RateLimitValue && !preservedRuntime) {
             rateLimitService.removeBucket(tenant.getId(), grant.id());
         }
         invalidateEntitlementTarget(tenant, grant.target(), grant.resourceId(), grant.entitlementKey());
@@ -259,11 +255,33 @@ public class CommandService {
     private CommandResult removeEntitlement(Tenant tenant, RemoveEntitlement payload) {
         EntitlementGrant existing = ModelValidation.findExactGrant(tenant, payload.target(), payload.resourceId(), payload.entitlementKey());
         if (existing == null) throw new NoSuchElementException("entitlement grant not found");
-        tenant.getGrants().remove(existing.id());
-        usageStore.remove(existing.id());
-        rateLimitService.removeBucket(tenant.getId(), existing.id());
+        purgeGrant(tenant, existing.id());
         invalidateEntitlementTarget(tenant, payload.target(), payload.resourceId(), payload.entitlementKey());
         return ok("entitlement removed: " + existing.id());
+    }
+
+    private void purgeGrant(Tenant tenant, String grantId) {
+        tenant.removeGrant(grantId);
+        usageStore.remove(grantId);
+        rateLimitService.removeBucket(tenant.getId(), grantId);
+    }
+
+    /**
+     * Consumable / rate-limit configuration changes reset that grant's runtime state.
+     * Equal quota/rate-limit values (same grant id upsert) preserve usage / bucket state.
+     */
+    static boolean isMaterialRuntimeChange(EntitlementValue previous, EntitlementValue next) {
+        if (previous instanceof QuotaValue oldQuota && next instanceof QuotaValue newQuota) {
+            return oldQuota.limit().compareTo(newQuota.limit()) != 0
+                    || !oldQuota.unit().equals(newQuota.unit())
+                    || oldQuota.period() != newQuota.period();
+        }
+        if (previous instanceof RateLimitValue oldRate && next instanceof RateLimitValue newRate) {
+            return oldRate.capacity().compareTo(newRate.capacity()) != 0
+                    || oldRate.refillTokens().compareTo(newRate.refillTokens()) != 0
+                    || !oldRate.refillPeriod().equals(newRate.refillPeriod());
+        }
+        return !Objects.equals(previous, next);
     }
 
     private void invalidateEntitlementTarget(Tenant tenant, Target target, String resourceId, String entitlementKey) {

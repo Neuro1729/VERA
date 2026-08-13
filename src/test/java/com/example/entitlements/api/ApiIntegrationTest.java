@@ -141,6 +141,59 @@ class ApiIntegrationTest {
                 .andExpect(jsonPath("$.availableTokens").value(50));
     }
 
+    @Test
+    void resourceDistributionEndpointGroupsImmediateChildrenByWinningGrant() throws Exception {
+        String setBackend = """
+                {
+                  "type":"SET_ENTITLEMENT",
+                  "tenantId":"acme",
+                  "payload":{
+                    "grantId":"g-backend-hours",
+                    "target":{"type":"SCOPE","id":"backend"},
+                    "resourceId":"gpu",
+                    "entitlementKey":"gpu.hours",
+                    "value":{"type":"QUOTA","limit":8000,"unit":"hour","period":"MONTHLY"}
+                  }
+                }
+                """;
+        String setEng = """
+                {
+                  "type":"SET_ENTITLEMENT",
+                  "tenantId":"acme",
+                  "payload":{
+                    "grantId":"g-eng-hours",
+                    "target":{"type":"SCOPE","id":"engineering"},
+                    "resourceId":"gpu",
+                    "entitlementKey":"gpu.hours",
+                    "value":{"type":"QUOTA","limit":5000,"unit":"hour","period":"MONTHLY"}
+                  }
+                }
+                """;
+        mockMvc.perform(post("/api/commands").contentType(MediaType.APPLICATION_JSON).content(setEng))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/commands").contentType(MediaType.APPLICATION_JSON).content(setBackend))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/tenants/acme/resources/gpu/distribution").param("scopeId", "engineering"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resourceId").value("gpu"))
+                .andExpect(jsonPath("$.scopeId").value("engineering"))
+                .andExpect(jsonPath("$.entitlements[?(@.entitlementKey=='gpu.hours')].grants[?(@.grantId=='g-eng-hours')].children[0].id").exists())
+                .andExpect(jsonPath("$.entitlements[?(@.entitlementKey=='gpu.hours')].grants[?(@.grantId=='g-backend-hours')].children[0].id").value("backend"))
+                .andExpect(jsonPath("$.entitlements[?(@.entitlementKey=='gpu.hours')].grants[?(@.grantId=='g-eng-hours')].runtime.consumed").value(0))
+                .andExpect(jsonPath("$.entitlements[?(@.entitlementKey=='gpu.hours')].grants[?(@.grantId=='g-eng-hours')].runtime.remaining").value(5000));
+    }
+
+    @Test
+    void resourceDistributionReturnsNotFoundForMissingTenantResourceOrScope() throws Exception {
+        mockMvc.perform(get("/api/tenants/missing/resources/gpu/distribution").param("scopeId", "engineering"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tenants/acme/resources/missing/distribution").param("scopeId", "engineering"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tenants/acme/resources/gpu/distribution").param("scopeId", "missing"))
+                .andExpect(status().isNotFound());
+    }
+
     private void consume(String subject, int amount) throws Exception {
         mockMvc.perform(post("/api/entitlements/consume")
                         .contentType(MediaType.APPLICATION_JSON)

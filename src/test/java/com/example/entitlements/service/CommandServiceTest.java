@@ -72,7 +72,7 @@ class CommandServiceTest {
 
     @Test
     void removesScopeSubtreeSubjectsAndTheirGrants() throws Exception {
-        tenant.getGrants().put("personal", new EntitlementGrant("personal", new Target(TargetType.SUBJECT, "alice"), "api", "api.enabled", new BooleanValue(true)));
+        tenant.putGrant(new EntitlementGrant("personal", new Target(TargetType.SUBJECT, "alice"), "api", "api.enabled", new BooleanValue(true)));
         execute("REMOVE_SCOPE", "{\"scopeId\":\"backend\"}");
         assertFalse(tenant.getScopes().containsKey("backend"));
         assertFalse(tenant.getSubjects().containsKey("alice"));

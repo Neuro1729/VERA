@@ -122,7 +122,7 @@ class RateLimitServiceTest {
 
     @Test
     void subjectOverrideGetsSeparateBucket() {
-        tenant.getGrants().put("g-alice-rate", new EntitlementGrant(
+        tenant.putGrant(new EntitlementGrant(
                 "g-alice-rate",
                 new Target(TargetType.SUBJECT, "alice"),
                 "api",
@@ -149,7 +149,7 @@ class RateLimitServiceTest {
         consume("alice", "1");
         assertEquals("g-eng-rate", cache.get(new ResolutionKey("acme", "alice", "api", "api.rateLimit")).orElseThrow());
 
-        tenant.getGrants().put("g-backend-rate-hidden", new EntitlementGrant(
+        tenant.putGrant(new EntitlementGrant(
                 "g-backend-rate-hidden",
                 new Target(TargetType.SCOPE, "backend"),
                 "api",
@@ -248,7 +248,7 @@ class RateLimitServiceTest {
 
     @Test
     void concurrentRequestsCannotOverspendABucket() throws Exception {
-        tenant.getGrants().put("g-tiny-rate", new EntitlementGrant(
+        tenant.putGrant(new EntitlementGrant(
                 "g-tiny-rate",
                 new Target(TargetType.SUBJECT, "alice"),
                 "api",

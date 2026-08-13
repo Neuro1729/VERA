@@ -106,6 +106,26 @@ public class RateLimitService {
         buckets.remove(bucketKey(tenantId, grantId));
     }
 
+    /**
+     * Read-only view of current available tokens for distribution.
+     * Does not create a bucket when none exists (reports full capacity).
+     * If a bucket exists, refills it to reflect current time before reading.
+     */
+    public BigDecimal peekAvailableTokens(String tenantId, String grantId, RateLimitValue config) {
+        Objects.requireNonNull(config, "rate limit config is required");
+        if (tenantId == null || tenantId.isBlank() || grantId == null || grantId.isBlank()) {
+            return config.capacity();
+        }
+        RateLimitState state = buckets.get(bucketKey(tenantId, grantId));
+        if (state == null) {
+            return config.capacity();
+        }
+        synchronized (state) {
+            refill(state, config, Instant.now(clock));
+            return state.getAvailableTokens();
+        }
+    }
+
     public void clear() {
         buckets.clear();
     }

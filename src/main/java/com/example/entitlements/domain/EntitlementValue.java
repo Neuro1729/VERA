@@ -8,11 +8,20 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
         @JsonSubTypes.Type(value = BooleanValue.class, name = "BOOLEAN"),
         @JsonSubTypes.Type(value = QuantityValue.class, name = "QUANTITY"),
         @JsonSubTypes.Type(value = QuotaValue.class, name = "QUOTA"),
+        @JsonSubTypes.Type(value = RateLimitValue.class, name = "RATE_LIMIT"),
         @JsonSubTypes.Type(value = RangeValue.class, name = "RANGE"),
         @JsonSubTypes.Type(value = TimeRangeValue.class, name = "TIME_RANGE"),
         @JsonSubTypes.Type(value = SetValue.class, name = "SET"),
         @JsonSubTypes.Type(value = TextValue.class, name = "TEXT")
 })
-public sealed interface EntitlementValue permits BooleanValue, QuantityValue, QuotaValue, RangeValue, TimeRangeValue, SetValue, TextValue {
+public sealed interface EntitlementValue permits
+        BooleanValue,
+        QuantityValue,
+        QuotaValue,
+        RateLimitValue,
+        RangeValue,
+        TimeRangeValue,
+        SetValue,
+        TextValue {
     EntitlementValueType valueType();
 }

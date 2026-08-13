@@ -33,11 +33,13 @@ class CommandServiceTest {
         registry = new TenantRegistry();
         usageStore = new UsageStore();
         tenant = TestFixtures.registeredTenant(registry);
-        mapper = new ObjectMapper();
+        mapper = new ObjectMapper().findAndRegisterModules();
         cache = new GrantResolutionCache();
         ResolutionCacheInvalidator invalidator = new ResolutionCacheInvalidator(cache);
-        service = new CommandService(registry, usageStore, mapper, cache, invalidator);
-        resolver = new EntitlementResolver(cache);
+        EntitlementResolver entitlementResolver = new EntitlementResolver(cache);
+        RateLimitService rateLimitService = new RateLimitService(registry, entitlementResolver, java.time.Clock.systemUTC());
+        service = new CommandService(registry, usageStore, mapper, cache, invalidator, rateLimitService);
+        resolver = entitlementResolver;
     }
 
     @Test

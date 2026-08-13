@@ -42,7 +42,7 @@ class RegistrationServiceTest {
         assertEquals(2, tenant.getResources().size());
         assertNotNull(tenant.getResources().get("api").definition("api.requests"));
         assertInstanceOf(QuotaValue.class, tenant.getResources().get("api").properties().get("totalCapacity"));
-        assertEquals(8, tenant.getGrants().size());
+        assertEquals(10, tenant.getGrants().size());
     }
 
     @Test

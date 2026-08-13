@@ -5,3 +5,5 @@ target/
 .DS_Store
 __pycache__/
 *.pyc
+hs_err_pid*.log
+replay_pid*.log

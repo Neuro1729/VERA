@@ -19,12 +19,20 @@ public class EntitlementService {
     private final TenantRegistry registry;
     private final EntitlementResolver resolver;
     private final UsageService usageService;
+    private final RateLimitService rateLimitService;
     private final Clock clock;
 
-    public EntitlementService(TenantRegistry registry, EntitlementResolver resolver, UsageService usageService, Clock clock) {
+    public EntitlementService(
+            TenantRegistry registry,
+            EntitlementResolver resolver,
+            UsageService usageService,
+            RateLimitService rateLimitService,
+            Clock clock
+    ) {
         this.registry = registry;
         this.resolver = resolver;
         this.usageService = usageService;
+        this.rateLimitService = rateLimitService;
         this.clock = clock;
     }
 
@@ -53,6 +61,12 @@ public class EntitlementService {
             BigDecimal amount = requested == null || requested.isNull() ? BigDecimal.ONE : numeric(requested);
             allowed = amount.signum() >= 0 && amount.compareTo(remaining) <= 0;
             reason = allowed ? "within remaining quota" : "quota exceeded";
+        } else if (value instanceof RateLimitValue) {
+            remaining = rateLimitService.availableTokens(
+                    request.tenantId(), request.subjectId(), request.resourceId(), request.entitlementKey());
+            BigDecimal amount = requested == null || requested.isNull() ? BigDecimal.ONE : numeric(requested);
+            allowed = amount.signum() >= 0 && amount.compareTo(remaining) <= 0;
+            reason = allowed ? "within available rate-limit tokens" : "rate limit exceeded";
         } else if (value instanceof RangeValue range) {
             if (requested == null || requested.isNull()) {
                 allowed = true;

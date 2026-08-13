@@ -20,19 +20,22 @@ public class CommandService {
     private final ObjectMapper objectMapper;
     private final GrantResolutionCache cache;
     private final ResolutionCacheInvalidator invalidator;
+    private final RateLimitService rateLimitService;
 
     public CommandService(
             TenantRegistry registry,
             UsageStore usageStore,
             ObjectMapper objectMapper,
             GrantResolutionCache cache,
-            ResolutionCacheInvalidator invalidator
+            ResolutionCacheInvalidator invalidator,
+            RateLimitService rateLimitService
     ) {
         this.registry = registry;
         this.usageStore = usageStore;
         this.objectMapper = objectMapper;
         this.cache = cache;
         this.invalidator = invalidator;
+        this.rateLimitService = rateLimitService;
     }
 
     public CommandResult execute(CommandRequest request) {
@@ -101,7 +104,10 @@ public class CommandService {
             if (remove) removedGrantIds.add(grant.id());
             return remove;
         });
-        removedGrantIds.forEach(usageStore::remove);
+        removedGrantIds.forEach(grantId -> {
+            usageStore.remove(grantId);
+            rateLimitService.removeBucket(tenant.getId(), grantId);
+        });
         subjectIds.forEach(tenant.getSubjects()::remove);
         scopeIds.forEach(tenant.getScopes()::remove);
         return ok("scope subtree removed: " + payload.scopeId());
@@ -151,7 +157,10 @@ public class CommandService {
             if (remove) removedGrantIds.add(grant.id());
             return remove;
         });
-        removedGrantIds.forEach(usageStore::remove);
+        removedGrantIds.forEach(grantId -> {
+            usageStore.remove(grantId);
+            rateLimitService.removeBucket(tenant.getId(), grantId);
+        });
         return ok("subject removed: " + subject.getId());
     }
 
@@ -219,7 +228,10 @@ public class CommandService {
             if (remove) removedGrantIds.add(grant.id());
             return remove;
         });
-        removedGrantIds.forEach(usageStore::remove);
+        removedGrantIds.forEach(grantId -> {
+            usageStore.remove(grantId);
+            rateLimitService.removeBucket(tenant.getId(), grantId);
+        });
         return ok("resource removed: " + payload.resourceId());
     }
 
@@ -232,10 +244,14 @@ public class CommandService {
         if (existing != null) {
             tenant.getGrants().remove(existing.id());
             usageStore.remove(existing.id());
+            rateLimitService.removeBucket(tenant.getId(), existing.id());
         }
         EntitlementGrant idCollision = tenant.getGrants().get(id);
         if (idCollision != null) throw new IllegalArgumentException("grant id already exists: " + id);
         tenant.getGrants().put(grant.id(), grant);
+        if (grant.value() instanceof RateLimitValue) {
+            rateLimitService.removeBucket(tenant.getId(), grant.id());
+        }
         invalidateEntitlementTarget(tenant, grant.target(), grant.resourceId(), grant.entitlementKey());
         return ok(existing == null ? "entitlement created: " + grant.id() : "entitlement replaced: " + grant.id());
     }
@@ -245,6 +261,7 @@ public class CommandService {
         if (existing == null) throw new NoSuchElementException("entitlement grant not found");
         tenant.getGrants().remove(existing.id());
         usageStore.remove(existing.id());
+        rateLimitService.removeBucket(tenant.getId(), existing.id());
         invalidateEntitlementTarget(tenant, payload.target(), payload.resourceId(), payload.entitlementKey());
         return ok("entitlement removed: " + existing.id());
     }

@@ -3,6 +3,8 @@ package com.example.entitlements.api;
 import com.example.entitlements.ResourceEntitlementApplication;
 import com.example.entitlements.request.ConsumptionRequest;
 import com.example.entitlements.request.EvaluationRequest;
+import com.example.entitlements.request.RateLimitRequest;
+import com.example.entitlements.service.RateLimitService;
 import com.example.entitlements.store.TenantRegistry;
 import com.example.entitlements.store.UsageStore;
 import com.example.entitlements.testutil.TestFixtures;
@@ -27,11 +29,13 @@ class ApiIntegrationTest {
     @Autowired ObjectMapper mapper;
     @Autowired TenantRegistry registry;
     @Autowired UsageStore usageStore;
+    @Autowired RateLimitService rateLimitService;
 
     @BeforeEach
     void setUp() throws Exception {
         registry.clear();
         usageStore.clear();
+        rateLimitService.clear();
         mockMvc.perform(post("/api/tenants/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsBytes(TestFixtures.registration())))
@@ -114,6 +118,27 @@ class ApiIntegrationTest {
     void unknownTenantReturnsNotFound() throws Exception {
         mockMvc.perform(get("/api/tenants/missing"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void rateLimitEndpointSharesDepartmentBucketAcrossUsers() throws Exception {
+        mockMvc.perform(post("/api/entitlements/rate-limit/consume")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsBytes(
+                                new RateLimitRequest("acme", "alice", "api", "api.rateLimit", new BigDecimal("30")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.allowed").value(true))
+                .andExpect(jsonPath("$.grantId").value("g-eng-rate"))
+                .andExpect(jsonPath("$.availableTokens").value(70));
+
+        mockMvc.perform(post("/api/entitlements/rate-limit/consume")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsBytes(
+                                new RateLimitRequest("acme", "bob", "api", "api.rateLimit", new BigDecimal("20")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.allowed").value(true))
+                .andExpect(jsonPath("$.grantId").value("g-eng-rate"))
+                .andExpect(jsonPath("$.availableTokens").value(50));
     }
 
     private void consume(String subject, int amount) throws Exception {

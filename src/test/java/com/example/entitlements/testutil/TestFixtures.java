@@ -6,6 +6,7 @@ import com.example.entitlements.service.RegistrationService;
 import com.example.entitlements.store.TenantRegistry;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,7 @@ public final class TestFixtures {
                 List.of(
                         new EntitlementDefinition("api.enabled", "API Enabled", EntitlementValueType.BOOLEAN),
                         new EntitlementDefinition("api.requests", "API Requests", EntitlementValueType.QUOTA),
+                        new EntitlementDefinition("api.rateLimit", "API Rate Limit", EntitlementValueType.RATE_LIMIT),
                         new EntitlementDefinition("api.maxBatch", "Max Batch", EntitlementValueType.QUANTITY),
                         new EntitlementDefinition("api.temperature", "Temperature", EntitlementValueType.RANGE),
                         new EntitlementDefinition("api.models", "Allowed Models", EntitlementValueType.SET),
@@ -62,7 +64,11 @@ public final class TestFixtures {
                 List.of(
                         new GrantInput("g-root-enabled", new Target(TargetType.SCOPE, "root"), "api", "api.enabled", new BooleanValue(true)),
                         new GrantInput("g-root-quota", new Target(TargetType.SCOPE, "root"), "api", "api.requests", new QuotaValue(new BigDecimal("100000"), "request", QuotaPeriod.MONTHLY)),
+                        new GrantInput("g-root-rate", new Target(TargetType.SCOPE, "root"), "api", "api.rateLimit",
+                                new RateLimitValue(new BigDecimal("20"), new BigDecimal("20"), Duration.ofMinutes(1))),
                         new GrantInput("g-eng-quota", new Target(TargetType.SCOPE, "engineering"), "api", "api.requests", new QuotaValue(new BigDecimal("1000000"), "request", QuotaPeriod.MONTHLY)),
+                        new GrantInput("g-eng-rate", new Target(TargetType.SCOPE, "engineering"), "api", "api.rateLimit",
+                                new RateLimitValue(new BigDecimal("100"), new BigDecimal("100"), Duration.ofMinutes(1))),
                         new GrantInput("g-batch", new Target(TargetType.SCOPE, "engineering"), "api", "api.maxBatch", new QuantityValue(new BigDecimal("100"), "request")),
                         new GrantInput("g-range", new Target(TargetType.SCOPE, "engineering"), "api", "api.temperature", new RangeValue(new BigDecimal("0"), new BigDecimal("2"), "value")),
                         new GrantInput("g-models", new Target(TargetType.SCOPE, "engineering"), "api", "api.models", new SetValue(Set.of("small", "large"))),

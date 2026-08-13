@@ -42,6 +42,7 @@ GET  /api/tenants/{tenantId}/usage
 POST /api/commands
 POST /api/entitlements/evaluate
 POST /api/entitlements/consume
+POST /api/entitlements/rate-limit/consume
 ```
 
 ## Try the sample registration

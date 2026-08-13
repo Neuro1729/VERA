@@ -29,7 +29,8 @@ class EntitlementServiceTest {
         MutableClock clock = new MutableClock(Instant.parse("2026-08-12T12:00:00Z"));
         EntitlementResolver resolver = new EntitlementResolver(new GrantResolutionCache());
         usageService = new UsageService(registry, usageStore, resolver, clock);
-        service = new EntitlementService(registry, resolver, usageService, clock);
+        RateLimitService rateLimitService = new RateLimitService(registry, resolver, clock);
+        service = new EntitlementService(registry, resolver, usageService, rateLimitService, clock);
         mapper = new ObjectMapper();
     }
 

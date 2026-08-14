@@ -6,6 +6,7 @@ import com.example.entitlements.request.GrantsSyncInput;
 import com.example.entitlements.request.OrganizationSyncInput;
 import com.example.entitlements.request.ResourcesSyncInput;
 import com.example.entitlements.service.BulkSyncService;
+import com.example.entitlements.service.TenantAccessService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,18 +19,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/tenants/{tenantId}/sync")
 public class BulkSyncController {
     private final BulkSyncService bulkSyncService;
+    private final TenantAccessService tenantAccessService;
 
-    public BulkSyncController(BulkSyncService bulkSyncService) {
+    public BulkSyncController(BulkSyncService bulkSyncService, TenantAccessService tenantAccessService) {
         this.bulkSyncService = bulkSyncService;
+        this.tenantAccessService = tenantAccessService;
     }
 
     @PostMapping("/preview")
     public BulkSyncPreview preview(@PathVariable String tenantId, @RequestBody BulkSyncRequest request) {
+        tenantAccessService.requireAdminTenant(tenantId);
         return bulkSyncService.preview(tenantId, request);
     }
 
     @PostMapping
     public ResponseEntity<BulkSyncPreview> apply(@PathVariable String tenantId, @RequestBody BulkSyncRequest request) {
+        tenantAccessService.requireAdminTenant(tenantId);
         return response(bulkSyncService.apply(tenantId, request));
     }
 
@@ -38,6 +43,7 @@ public class BulkSyncController {
             @PathVariable String tenantId,
             @RequestBody OrganizationSyncInput request
     ) {
+        tenantAccessService.requireAdminTenant(tenantId);
         return bulkSyncService.previewOrganization(tenantId, request);
     }
 
@@ -46,6 +52,7 @@ public class BulkSyncController {
             @PathVariable String tenantId,
             @RequestBody OrganizationSyncInput request
     ) {
+        tenantAccessService.requireAdminTenant(tenantId);
         return response(bulkSyncService.applyOrganization(tenantId, request));
     }
 
@@ -54,6 +61,7 @@ public class BulkSyncController {
             @PathVariable String tenantId,
             @RequestBody ResourcesSyncInput request
     ) {
+        tenantAccessService.requireAdminTenant(tenantId);
         return bulkSyncService.previewResources(tenantId, request);
     }
 
@@ -62,6 +70,7 @@ public class BulkSyncController {
             @PathVariable String tenantId,
             @RequestBody ResourcesSyncInput request
     ) {
+        tenantAccessService.requireAdminTenant(tenantId);
         return response(bulkSyncService.applyResources(tenantId, request));
     }
 
@@ -70,6 +79,7 @@ public class BulkSyncController {
             @PathVariable String tenantId,
             @RequestBody GrantsSyncInput request
     ) {
+        tenantAccessService.requireAdminTenant(tenantId);
         return bulkSyncService.previewGrants(tenantId, request);
     }
 
@@ -78,6 +88,7 @@ public class BulkSyncController {
             @PathVariable String tenantId,
             @RequestBody GrantsSyncInput request
     ) {
+        tenantAccessService.requireAdminTenant(tenantId);
         return response(bulkSyncService.applyGrants(tenantId, request));
     }
 

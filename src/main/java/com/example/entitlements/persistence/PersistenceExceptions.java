@@ -26,6 +26,18 @@ public final class PersistenceExceptions {
             if (detail.contains("resources_pkey")) {
                 return new IllegalArgumentException("resource already exists");
             }
+            if (detail.contains("tenant_admin_normalized_email")) {
+                return new IllegalStateException("email already registered");
+            }
+            if (detail.contains("tenant_admin_tenant_id")) {
+                return new IllegalStateException("tenant already has an administrator");
+            }
+            if (detail.contains("tenant_api_credential_tenant_id")) {
+                return new IllegalStateException("tenant already has an API credential");
+            }
+            if (detail.contains("tenant_api_credential_public_id")) {
+                return new IllegalArgumentException("duplicate API credential");
+            }
             return new IllegalArgumentException("duplicate key");
         }
         if (ex instanceof DataIntegrityViolationException) {

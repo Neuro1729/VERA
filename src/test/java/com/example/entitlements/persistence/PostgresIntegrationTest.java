@@ -31,6 +31,8 @@ import org.springframework.test.web.servlet.MockMvc;
 public abstract class PostgresIntegrationTest {
     @Autowired protected TenantRegistry registry;
     @Autowired protected TenantRepository tenantRepository;
+    @Autowired protected TenantAdminRepository tenantAdminRepository;
+    @Autowired protected TenantApiCredentialRepository tenantApiCredentialRepository;
     @Autowired protected UsageRepository usageRepository;
     @Autowired protected RateLimitStateRepository rateLimitStateRepository;
     @Autowired protected EntitlementHistoryRepository entitlementHistoryRepository;
@@ -56,6 +58,8 @@ public abstract class PostgresIntegrationTest {
         rateLimitStateRepository.clear();
         entitlementHistoryRepository.clear();
         usageHistoryRepository.clear();
+        tenantAdminRepository.clear();
+        tenantApiCredentialRepository.clear();
         tenantRepository.clear();
     }
 

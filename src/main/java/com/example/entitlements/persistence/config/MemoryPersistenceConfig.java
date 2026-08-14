@@ -1,8 +1,12 @@
 package com.example.entitlements.persistence.config;
 
 import com.example.entitlements.persistence.RateLimitStateRepository;
+import com.example.entitlements.persistence.TenantAdminRepository;
+import com.example.entitlements.persistence.TenantApiCredentialRepository;
 import com.example.entitlements.persistence.TenantRepository;
 import com.example.entitlements.persistence.memory.InMemoryRateLimitStateRepository;
+import com.example.entitlements.persistence.memory.InMemoryTenantAdminRepository;
+import com.example.entitlements.persistence.memory.InMemoryTenantApiCredentialRepository;
 import com.example.entitlements.persistence.memory.InMemoryTenantRepository;
 import com.example.entitlements.store.EntitlementHistoryStore;
 import com.example.entitlements.store.UsageHistoryStore;
@@ -21,6 +25,16 @@ public class MemoryPersistenceConfig {
     @Bean
     TenantRepository tenantRepository() {
         return new InMemoryTenantRepository();
+    }
+
+    @Bean
+    TenantAdminRepository tenantAdminRepository() {
+        return new InMemoryTenantAdminRepository();
+    }
+
+    @Bean
+    TenantApiCredentialRepository tenantApiCredentialRepository() {
+        return new InMemoryTenantApiCredentialRepository();
     }
 
     @Bean

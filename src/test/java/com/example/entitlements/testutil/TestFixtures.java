@@ -89,6 +89,24 @@ public final class TestFixtures {
                 new GrantsConfigInput(request.grants()));
     }
 
+    public static CompanyRegistrationRequest companyRegistration(String tenantId, String name) {
+        RegistrationRequest request = registration();
+        return new CompanyRegistrationRequest(
+                new OrganizationConfigInput(new TenantInput(tenantId, name), request.structure()),
+                new ResourcesConfigInput(request.resources()),
+                new GrantsConfigInput(request.grants()));
+    }
+
+    public static CompanySignupRequest signup() {
+        return signup("acme", "Acme Corp", "admin@acme.com", "a-long-password");
+    }
+
+    public static CompanySignupRequest signup(String tenantId, String name, String email, String password) {
+        return new CompanySignupRequest(
+                new AdminRegistrationInput(email, password),
+                companyRegistration(tenantId, name));
+    }
+
     public static ScopeInput toScopeInput(Tenant tenant) {
         return toScopeInput(tenant, tenant.getRootScopeId());
     }

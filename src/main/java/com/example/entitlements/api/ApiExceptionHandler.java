@@ -3,6 +3,8 @@ package com.example.entitlements.api;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -24,6 +26,16 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     ResponseEntity<ApiError> conflict(IllegalStateException ex) {
         return response(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    ResponseEntity<ApiError> unauthorized(AuthenticationException ex) {
+        return response(HttpStatus.UNAUTHORIZED, "authentication required");
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ApiError> forbidden(AccessDeniedException ex) {
+        return response(HttpStatus.FORBIDDEN, "access denied");
     }
 
     private ResponseEntity<ApiError> response(HttpStatus status, String message) {

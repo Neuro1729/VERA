@@ -72,21 +72,15 @@ First start against an empty `entitlements` database applies Flyway migrations a
 
 ### Smoke the API
 
+Preview remains public. Secure company creation is `POST /api/auth/signup` (CSRF + session). Gateway calls need `X-VERA-API-KEY`.
+
 ```bash
 curl -sS -X POST http://localhost:8080/api/company-registration/preview \
   -H "Content-Type: application/json" \
   --data-binary @examples/company-registration.json
-
-curl -sS -X POST http://localhost:8080/api/company-registration \
-  -H "Content-Type: application/json" \
-  --data-binary @examples/company-registration.json
-
-curl -sS -X POST http://localhost:8080/api/gateway/tenants/acme/evaluate \
-  -H "Content-Type: application/json" \
-  -d '{"subjectId":"emp-1001","resourceId":"gpu","entitlementKey":"gpu.enabled","requestedValue":true}'
 ```
 
-Legacy flat registration still works: `POST /api/tenants/register` with `examples/acme-registration.json`.
+See **Authentication (V1)** below for signup/login/gateway curl with cookies and CSRF.
 
 ## Tests
 
@@ -103,7 +97,7 @@ Legacy flat registration still works: `POST /api/tenants/register` with `example
 Postgres-only:
 
 ```bash
-mvn "-Dtest=PostgresPersistenceIT,PostgresHttpIT,PostgresBulkSyncIT" test
+mvn "-Dtest=PostgresPersistenceIT,PostgresHttpIT,PostgresBulkSyncIT,PostgresSecurityIT" test
 ```
 
 One class or method:
@@ -116,6 +110,96 @@ One class or method:
 `./scripts/test-all.sh` runs the full suite and prints PASS/FAIL (needs `python3` and a Unix shell).
 
 ## HTTP API
+
+```text
+GET  /api/auth/csrf
+POST /api/auth/signup
+POST /api/auth/login
+GET  /api/auth/me
+POST /api/auth/logout
+GET  /api/auth/api-key
+POST /api/auth/api-key/rotate
+
+POST /api/company-registration/preview   # public, side-effect free
+POST /api/auth/signup                    # public secure company creation
+
+GET  /api/tenants                        # authenticated admin's tenant only
+GET  /api/tenants/{tenantId}
+GET  /api/tenants/{tenantId}/usage
+
+POST /api/commands                       # small edits
+
+POST /api/tenants/{tenantId}/sync/preview
+POST /api/tenants/{tenantId}/sync
+POST /api/tenants/{tenantId}/sync/organization[/preview]
+POST /api/tenants/{tenantId}/sync/resources[/preview]
+POST /api/tenants/{tenantId}/sync/grants[/preview]
+
+POST /api/gateway/tenants/{tenantId}/evaluate
+POST /api/gateway/tenants/{tenantId}/consume
+POST /api/gateway/tenants/{tenantId}/rate-limit/consume
+POST /api/gateway/tenants/{tenantId}/use
+
+POST /api/entitlements/evaluate          # admin debug; tenantId in body
+POST /api/entitlements/consume
+POST /api/entitlements/rate-limit/consume
+POST /api/entitlements/use
+
+GET  /api/tenants/{tenantId}/resources/{resourceId}/distribution?scopeId=
+GET  /api/tenants/{tenantId}/resources/{resourceId}/live
+GET  /api/tenants/{tenantId}/resources/{resourceId}/entitlement-history
+GET  /api/tenants/{tenantId}/resources/{resourceId}/usage-history
+```
+
+When `vera.security.enabled=true` (the default), `POST /api/company-registration` and `POST /api/tenants/register` are not anonymous creation paths. Use `POST /api/auth/signup`. Preview stays public. Existing tests/dev fixtures can set `vera.security.enabled=false` to keep the older unauthenticated apply endpoints.
+
+Sample JSON lives in `examples/`. Domain and resolution rules: `architecture-decisions.md`.
+
+## Authentication (V1)
+
+Two actors, no JWT/SSO.
+
+| Actor | Credential | Transport | Access |
+| --- | --- | --- | --- |
+| One human admin per tenant | email + password | server-side `HttpSession`, `JSESSIONID` cookie | management APIs |
+| One company backend per tenant | VERA API key | `X-VERA-API-KEY` header | `/api/gateway/**` only |
+
+The server stores the authenticated session. The browser/client keeps only `JSESSIONID` (HttpOnly, SameSite=Lax, 30 minute timeout). Set `VERA_SESSION_COOKIE_SECURE=true` in HTTPS production; leave it unset/false for localhost.
+
+Raw API keys are returned **once** at signup and on rotate. The database stores `publicId` + `secretHash` only. An API key is bound to exactly one tenant. Path/body `tenantId` is never trusted as authentication.
+
+```bash
+# 1. CSRF cookie + token (required for cookie-authenticated POST/PUT/DELETE)
+curl -c cookies.txt -sS http://localhost:8080/api/auth/csrf
+
+# 2. Signup (creates tenant + admin + API key, then logs the admin in)
+TOKEN=$(python -c "import json; print(json.load(open('csrf.json'))['token'])")  # or copy token from step 1
+curl -c cookies.txt -b cookies.txt -sS -X POST http://localhost:8080/api/auth/signup \
+  -H "Content-Type: application/json" \
+  -H "X-XSRF-TOKEN: $TOKEN" \
+  -d '{"admin":{"email":"admin@acme.com","password":"a-long-password"},"registration": ...}'
+
+# 3. Or login later (reuse cookie jar so JSESSIONID is stored)
+curl -c cookies.txt -b cookies.txt -sS http://localhost:8080/api/auth/csrf
+curl -c cookies.txt -b cookies.txt -sS -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -H "X-XSRF-TOKEN: $TOKEN" \
+  -d '{"email":"admin@acme.com","password":"a-long-password"}'
+
+curl -b cookies.txt -sS http://localhost:8080/api/auth/me
+
+# 4. Company runtime (stateless; no CSRF; no JSESSIONID)
+curl -sS -X POST http://localhost:8080/api/gateway/tenants/acme/evaluate \
+  -H "Content-Type: application/json" \
+  -H "X-VERA-API-KEY: vera_live_...." \
+  -d '{"subjectId":"emp-1001","resourceId":"gpu","entitlementKey":"gpu.enabled","requestedValue":true}'
+```
+
+Postman/curl must send both the `XSRF-TOKEN` cookie and `X-XSRF-TOKEN` header for management mutations. Gateway calls must not use the admin session; admin calls must not use the API key.
+
+JWT, OAuth, OIDC, SAML, refresh tokens, and multiple admins per tenant are intentionally deferred.
+
+## Company onboarding
 
 ```text
 POST /api/company-registration/preview
@@ -160,7 +244,7 @@ A company provides three logical JSON configurations: **organization**, **resour
 three configs → preview → cross-validation → atomic register
 ```
 
-`POST /api/company-registration/preview` is side-effect free. `POST /api/company-registration` writes tenant + CREATED history in one transaction.
+`POST /api/company-registration/preview` is side-effect free. Secure apply is `POST /api/auth/signup`, which creates the tenant, admin, and API key in one transaction.
 
 ## Ongoing configuration
 
@@ -196,9 +280,7 @@ POST /api/gateway/tenants/{tenantId}/rate-limit/consume
 POST /api/gateway/tenants/{tenantId}/use
 ```
 
-This is machine-to-machine. There is no user redirect. The engine returns ALLOW/DENY/remaining and may update usage; it does **not** allocate GPUs or call company systems.
-
-The gateway is currently **unauthenticated**. `tenantId` and `subjectId` are trusted inputs until a later auth phase (`/api/gateway/**`).
+This is machine-to-machine. There is no user redirect. Authenticate with `X-VERA-API-KEY`. The key's tenant must match the path `tenantId` or the call returns HTTP 403. The engine returns ALLOW/DENY/remaining and may update usage; it does **not** allocate GPUs or call company systems. Quota/rate-limit denial remains HTTP 200 `allowed=false`.
 
 ## Troubleshooting
 

@@ -13,6 +13,7 @@ import com.example.entitlements.request.RateLimitResult;
 import com.example.entitlements.service.EntitlementService;
 import com.example.entitlements.service.RateLimitService;
 import com.example.entitlements.service.ResourceUseService;
+import com.example.entitlements.service.TenantAccessService;
 import com.example.entitlements.service.UsageService;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,17 +28,20 @@ public class CompanyGatewayController {
     private final UsageService usageService;
     private final RateLimitService rateLimitService;
     private final ResourceUseService resourceUseService;
+    private final TenantAccessService tenantAccessService;
 
     public CompanyGatewayController(
             EntitlementService entitlementService,
             UsageService usageService,
             RateLimitService rateLimitService,
-            ResourceUseService resourceUseService
+            ResourceUseService resourceUseService,
+            TenantAccessService tenantAccessService
     ) {
         this.entitlementService = entitlementService;
         this.usageService = usageService;
         this.rateLimitService = rateLimitService;
         this.resourceUseService = resourceUseService;
+        this.tenantAccessService = tenantAccessService;
     }
 
     @PostMapping("/evaluate")
@@ -45,6 +49,7 @@ public class CompanyGatewayController {
             @PathVariable String tenantId,
             @RequestBody GatewayEvaluationRequest request
     ) {
+        tenantAccessService.requireGatewayTenant(tenantId);
         return entitlementService.evaluate(new EvaluationRequest(
                 tenantId, request.subjectId(), request.resourceId(), request.entitlementKey(), request.requestedValue()));
     }
@@ -54,6 +59,7 @@ public class CompanyGatewayController {
             @PathVariable String tenantId,
             @RequestBody GatewayConsumptionRequest request
     ) {
+        tenantAccessService.requireGatewayTenant(tenantId);
         return usageService.consume(new ConsumptionRequest(
                 tenantId, request.subjectId(), request.resourceId(), request.entitlementKey(), request.amount()));
     }
@@ -63,6 +69,7 @@ public class CompanyGatewayController {
             @PathVariable String tenantId,
             @RequestBody GatewayRateLimitRequest request
     ) {
+        tenantAccessService.requireGatewayTenant(tenantId);
         return rateLimitService.tryConsume(new RateLimitRequest(
                 tenantId, request.subjectId(), request.resourceId(), request.entitlementKey(), request.tokens()));
     }
@@ -72,6 +79,7 @@ public class CompanyGatewayController {
             @PathVariable String tenantId,
             @RequestBody GatewayUseRequest request
     ) {
+        tenantAccessService.requireGatewayTenant(tenantId);
         return resourceUseService.commitUse(new EvaluationRequest(
                 tenantId, request.subjectId(), request.resourceId(), request.entitlementKey(), request.requestedValue()));
     }

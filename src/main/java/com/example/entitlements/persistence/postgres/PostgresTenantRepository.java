@@ -247,6 +247,8 @@ public class PostgresTenantRepository implements TenantRepository {
     public void clear() {
         jdbc.getJdbcTemplate().execute("""
                 TRUNCATE TABLE
+                    tenant_admin,
+                    tenant_api_credential,
                     usage_events,
                     usage_buckets,
                     entitlement_history,

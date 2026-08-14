@@ -1,10 +1,7 @@
 package com.example.entitlements.persistence.config;
 
-import com.example.entitlements.persistence.EntitlementHistoryRepository;
 import com.example.entitlements.persistence.RateLimitStateRepository;
 import com.example.entitlements.persistence.TenantRepository;
-import com.example.entitlements.persistence.UsageHistoryRepository;
-import com.example.entitlements.persistence.UsageRepository;
 import com.example.entitlements.persistence.memory.InMemoryRateLimitStateRepository;
 import com.example.entitlements.persistence.memory.InMemoryTenantRepository;
 import com.example.entitlements.store.EntitlementHistoryStore;
@@ -32,11 +29,6 @@ public class MemoryPersistenceConfig {
     }
 
     @Bean
-    UsageRepository usageRepository(UsageStore usageStore) {
-        return usageStore;
-    }
-
-    @Bean
     RateLimitStateRepository rateLimitStateRepository() {
         return new InMemoryRateLimitStateRepository();
     }
@@ -47,18 +39,8 @@ public class MemoryPersistenceConfig {
     }
 
     @Bean
-    EntitlementHistoryRepository entitlementHistoryRepository(EntitlementHistoryStore store) {
-        return store;
-    }
-
-    @Bean
     UsageHistoryStore usageHistoryStore() {
         return new UsageHistoryStore();
-    }
-
-    @Bean
-    UsageHistoryRepository usageHistoryRepository(UsageHistoryStore store) {
-        return store;
     }
 
     @Bean

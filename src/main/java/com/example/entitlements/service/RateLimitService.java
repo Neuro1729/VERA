@@ -61,60 +61,62 @@ public class RateLimitService {
         }
 
         Tenant tenant = tenantRegistry.getRequired(request.tenantId());
-        if (!tenant.getSubjects().containsKey(request.subjectId())) {
-            throw new NoSuchElementException("subject not found: " + request.subjectId());
-        }
+        synchronized (tenant) {
+            if (!tenant.getSubjects().containsKey(request.subjectId())) {
+                throw new NoSuchElementException("subject not found: " + request.subjectId());
+            }
 
-        ResolvedEntitlement resolved = entitlementResolver.resolve(
-                        tenant, request.subjectId(), request.resourceId(), request.entitlementKey())
-                .orElseThrow(() -> new NoSuchElementException("no entitlement found"));
+            ResolvedEntitlement resolved = entitlementResolver.resolve(
+                            tenant, request.subjectId(), request.resourceId(), request.entitlementKey())
+                    .orElseThrow(() -> new NoSuchElementException("no entitlement found"));
 
-        if (!(resolved.grant().value() instanceof RateLimitValue config)) {
-            throw new IllegalArgumentException("only RATE_LIMIT entitlements support token bucket consume");
-        }
+            if (!(resolved.grant().value() instanceof RateLimitValue config)) {
+                throw new IllegalArgumentException("only RATE_LIMIT entitlements support token bucket consume");
+            }
 
-        Instant now = Instant.now(clock);
-        buckets.insertIfAbsent(tenant.getId(), resolved.grant().id(), new RateLimitState(config.capacity(), now));
-        RateLimitState state = buckets.lock(tenant.getId(), resolved.grant().id());
-        if (state == null) {
-            state = new RateLimitState(config.capacity(), now);
-        }
+            Instant now = Instant.now(clock);
+            buckets.insertIfAbsent(tenant.getId(), resolved.grant().id(), new RateLimitState(config.capacity(), now));
+            RateLimitState state = buckets.lock(tenant.getId(), resolved.grant().id());
+            if (state == null) {
+                state = new RateLimitState(config.capacity(), now);
+            }
 
-        refill(state, config, Instant.now(clock));
-        if (state.getAvailableTokens().compareTo(request.tokens()) < 0) {
-            return new RateLimitResult(
-                    false,
-                    "rate limit exceeded",
+            refill(state, config, Instant.now(clock));
+            if (state.getAvailableTokens().compareTo(request.tokens()) < 0) {
+                return new RateLimitResult(
+                        false,
+                        "rate limit exceeded",
+                        resolved.grant().id(),
+                        resolved.source(),
+                        request.tokens(),
+                        state.getAvailableTokens());
+            }
+            state.setAvailableTokens(state.getAvailableTokens().subtract(request.tokens()));
+            buckets.save(tenant.getId(), resolved.grant().id(), state);
+            RateLimitResult result = new RateLimitResult(
+                    true,
+                    "consumed",
                     resolved.grant().id(),
                     resolved.source(),
                     request.tokens(),
                     state.getAvailableTokens());
-        }
-        state.setAvailableTokens(state.getAvailableTokens().subtract(request.tokens()));
-        buckets.save(tenant.getId(), resolved.grant().id(), state);
-        RateLimitResult result = new RateLimitResult(
-                true,
-                "consumed",
-                resolved.grant().id(),
-                resolved.source(),
-                request.tokens(),
-                state.getAvailableTokens());
 
-        Resource resource = tenant.getResources().get(request.resourceId());
-        historyStore.addToBucket(
-                tenant.getId(),
-                request.subjectId(),
-                UsageHistorySnapshots.subjectName(tenant, request.subjectId()),
-                resource.id(),
-                resource.name(),
-                resource.kind(),
-                request.entitlementKey(),
-                resolved.grant().id(),
-                resolved.source(),
-                UsageHistorySnapshots.grantTargetName(tenant, resolved.source()),
-                request.tokens(),
-                Instant.now(clock));
-        return result;
+            Resource resource = tenant.getResources().get(request.resourceId());
+            historyStore.addToBucket(
+                    tenant.getId(),
+                    request.subjectId(),
+                    UsageHistorySnapshots.subjectName(tenant, request.subjectId()),
+                    resource.id(),
+                    resource.name(),
+                    resource.kind(),
+                    request.entitlementKey(),
+                    resolved.grant().id(),
+                    resolved.source(),
+                    UsageHistorySnapshots.grantTargetName(tenant, resolved.source()),
+                    request.tokens(),
+                    Instant.now(clock));
+            return result;
+        }
     }
 
     public BigDecimal availableTokens(

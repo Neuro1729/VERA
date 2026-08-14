@@ -1,4 +1,6 @@
-# Resource Entitlement Engine
+# VERA
+
+**VERA** — Versatile Entitlement & Resource Authorization
 
 Generic hierarchical resource-entitlement engine (Java 21 + Spring Boot 3.5).
 
@@ -17,8 +19,8 @@ On Windows, `mvnw` is a shell script. Use Git Bash / WSL (`./mvnw ...`) or a loc
 ## Clone
 
 ```bash
-git clone <this-repo-url>
-cd resource-entitlement-engine
+git clone https://github.com/Neuro1729/VERA.git
+cd VERA
 ```
 
 ## PostgreSQL setup

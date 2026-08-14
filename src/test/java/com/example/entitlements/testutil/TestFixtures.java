@@ -81,6 +81,77 @@ public final class TestFixtures {
         );
     }
 
+    public static CompanyRegistrationRequest companyRegistration() {
+        RegistrationRequest request = registration();
+        return new CompanyRegistrationRequest(
+                new OrganizationConfigInput(request.tenant(), request.structure()),
+                new ResourcesConfigInput(request.resources()),
+                new GrantsConfigInput(request.grants()));
+    }
+
+    public static ScopeInput toScopeInput(Tenant tenant) {
+        return toScopeInput(tenant, tenant.getRootScopeId());
+    }
+
+    public static ScopeInput toScopeInput(Tenant tenant, String scopeId) {
+        Scope scope = tenant.getScopes().get(scopeId);
+        List<ScopeInput> children = scope.getChildScopeIds().stream()
+                .map(childId -> toScopeInput(tenant, childId))
+                .toList();
+        List<SubjectInput> subjects = scope.getSubjectIds().stream()
+                .map(subjectId -> {
+                    Subject subject = tenant.getSubjects().get(subjectId);
+                    return new SubjectInput(subject.getId(), subject.getKind(), subject.getName(), subject.getMetadata());
+                })
+                .toList();
+        return new ScopeInput(scope.getId(), scope.getKind(), scope.getName(), scope.getMetadata(), children, subjects);
+    }
+
+    public static ScopeInput addChildScope(ScopeInput node, String parentId, ScopeInput child) {
+        if (node.id().equals(parentId)) {
+            List<ScopeInput> children = new java.util.ArrayList<>(safe(node.children()));
+            children.add(child);
+            return new ScopeInput(node.id(), node.kind(), node.name(), node.metadata(), children, node.subjects());
+        }
+        List<ScopeInput> children = safe(node.children()).stream()
+                .map(existing -> addChildScope(existing, parentId, child))
+                .toList();
+        return new ScopeInput(node.id(), node.kind(), node.name(), node.metadata(), children, node.subjects());
+    }
+
+    public static ScopeInput removeScopeFromTree(ScopeInput node, String removeId) {
+        List<ScopeInput> children = safe(node.children()).stream()
+                .filter(child -> !child.id().equals(removeId))
+                .map(child -> removeScopeFromTree(child, removeId))
+                .toList();
+        return new ScopeInput(node.id(), node.kind(), node.name(), node.metadata(), children, node.subjects());
+    }
+
+    public static ScopeInput removeSubjectFromTree(ScopeInput node, String subjectId) {
+        List<SubjectInput> subjects = safe(node.subjects()).stream()
+                .filter(subject -> !subject.id().equals(subjectId))
+                .toList();
+        List<ScopeInput> children = safe(node.children()).stream()
+                .map(child -> removeSubjectFromTree(child, subjectId))
+                .toList();
+        return new ScopeInput(node.id(), node.kind(), node.name(), node.metadata(), children, subjects);
+    }
+
+    public static List<GrantInput> grantInputs(Tenant tenant) {
+        return tenant.getGrants().values().stream()
+                .map(grant -> new GrantInput(
+                        grant.id(), grant.target(), grant.resourceId(), grant.entitlementKey(), grant.value()))
+                .toList();
+    }
+
+    public static List<Resource> resources(Tenant tenant) {
+        return List.copyOf(tenant.getResources().values());
+    }
+
+    private static <T> List<T> safe(List<T> values) {
+        return values == null ? List.of() : values;
+    }
+
     public static Tenant registeredTenant(TenantRegistry registry) {
         EntitlementHistoryService historyService = new EntitlementHistoryService(
                 registry, new EntitlementHistoryStore(), Clock.systemUTC());

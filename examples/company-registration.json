@@ -1,0 +1,58 @@
+{
+  "organization": {
+    "tenant": {
+      "id": "acme",
+      "name": "Acme Corporation"
+    },
+    "structure": {
+      "id": "root",
+      "kind": "company",
+      "name": "Acme Corporation",
+      "children": [
+        {
+          "id": "engineering",
+          "kind": "department",
+          "name": "Engineering",
+          "children": [
+            {
+              "id": "backend",
+              "kind": "team",
+              "name": "Backend",
+              "subjects": [
+                {"id": "emp-1001", "kind": "employee", "name": "Alice"}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "resources": {
+    "resources": [
+      {
+        "id": "gpu",
+        "kind": "compute",
+        "name": "GPU Cluster",
+        "metadata": {},
+        "properties": {
+          "capacity": {"type": "QUANTITY", "value": 100, "unit": "gpu"}
+        },
+        "entitlementDefinitions": [
+          {"key": "gpu.enabled", "name": "GPU Enabled", "valueType": "BOOLEAN"},
+          {"key": "gpu.hours", "name": "GPU Hours", "valueType": "QUOTA"}
+        ]
+      }
+    ]
+  },
+  "grants": {
+    "grants": [
+      {
+        "id": "g-eng-hours",
+        "target": {"type": "SCOPE", "id": "engineering"},
+        "resourceId": "gpu",
+        "entitlementKey": "gpu.hours",
+        "value": {"type": "QUOTA", "limit": 5000, "unit": "gpu-hour", "period": "MONTHLY"}
+      }
+    ]
+  }
+}

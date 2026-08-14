@@ -29,5 +29,9 @@ public class Subject {
     public void setKind(String kind) { if (kind != null && !kind.isBlank()) this.kind = kind; }
     public void setName(String name) { if (name != null && !name.isBlank()) this.name = name; }
     public void mergeMetadata(Map<String, Object> changes) { if (changes != null) metadata.putAll(changes); }
+    public void replaceMetadata(Map<String, Object> replacement) {
+        metadata.clear();
+        if (replacement != null) metadata.putAll(replacement);
+    }
     public void setScopeId(String scopeId) { this.scopeId = scopeId; }
 }

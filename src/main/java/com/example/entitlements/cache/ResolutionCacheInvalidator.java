@@ -25,6 +25,10 @@ public class ResolutionCacheInvalidator {
         }
     }
 
+    public void invalidateTenant(String tenantId) {
+        cache.invalidateTenant(tenantId);
+    }
+
     public void invalidateScopeEntitlement(
             Tenant tenant,
             String scopeId,

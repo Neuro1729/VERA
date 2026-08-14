@@ -107,7 +107,11 @@ public class CommandService {
         Scope scope = requiredScope(tenant, payload.scopeId());
         scope.setKind(payload.kind());
         scope.setName(payload.name());
-        scope.mergeMetadata(payload.metadata());
+        if (Boolean.TRUE.equals(payload.replaceMetadata())) {
+            scope.replaceMetadata(payload.metadata());
+        } else {
+            scope.mergeMetadata(payload.metadata());
+        }
         tenantRepository.updateScope(tenant.getId(), scope);
         return ok("scope updated: " + scope.getId());
     }
@@ -172,7 +176,11 @@ public class CommandService {
         Subject subject = requiredSubject(tenant, payload.subjectId());
         subject.setKind(payload.kind());
         subject.setName(payload.name());
-        subject.mergeMetadata(payload.metadata());
+        if (Boolean.TRUE.equals(payload.replaceMetadata())) {
+            subject.replaceMetadata(payload.metadata());
+        } else {
+            subject.mergeMetadata(payload.metadata());
+        }
         tenantRepository.updateSubject(tenant.getId(), subject);
         return ok("subject updated: " + subject.getId());
     }
@@ -215,13 +223,24 @@ public class CommandService {
 
     private CommandResult updateResource(Tenant tenant, UpdateResource payload) {
         Resource current = requiredResource(tenant, payload.resourceId());
-        Map<String, Object> metadata = new LinkedHashMap<>(current.metadata());
-        if (payload.metadata() != null) metadata.putAll(payload.metadata());
-        Map<String, EntitlementValue> properties = new LinkedHashMap<>(current.properties());
-        if (payload.properties() != null) properties.putAll(payload.properties());
-        boolean definitionsChanged = payload.entitlementDefinitions() != null;
-        List<EntitlementDefinition> definitions = definitionsChanged
-                ? payload.entitlementDefinitions() : current.entitlementDefinitions();
+        boolean replace = Boolean.TRUE.equals(payload.replace());
+        Map<String, Object> metadata;
+        Map<String, EntitlementValue> properties;
+        List<EntitlementDefinition> definitions;
+        boolean definitionsChanged;
+        if (replace) {
+            metadata = payload.metadata() == null ? Map.of() : payload.metadata();
+            properties = payload.properties() == null ? Map.of() : payload.properties();
+            definitions = payload.entitlementDefinitions() == null ? List.of() : payload.entitlementDefinitions();
+            definitionsChanged = !current.entitlementDefinitions().equals(definitions);
+        } else {
+            metadata = new LinkedHashMap<>(current.metadata());
+            if (payload.metadata() != null) metadata.putAll(payload.metadata());
+            properties = new LinkedHashMap<>(current.properties());
+            if (payload.properties() != null) properties.putAll(payload.properties());
+            definitionsChanged = payload.entitlementDefinitions() != null;
+            definitions = definitionsChanged ? payload.entitlementDefinitions() : current.entitlementDefinitions();
+        }
 
         Resource updated = new Resource(
                 current.id(),

@@ -14,12 +14,12 @@ public final class CommandPayloads {
 
     public record ScopeData(String id, String kind, String name, Map<String, Object> metadata) {}
     public record AddScope(String parentScopeId, ScopeData scope) {}
-    public record UpdateScope(String scopeId, String kind, String name, Map<String, Object> metadata) {}
+    public record UpdateScope(String scopeId, String kind, String name, Map<String, Object> metadata, Boolean replaceMetadata) {}
     public record RemoveScope(String scopeId) {}
     public record MoveScope(String scopeId, String newParentScopeId) {}
 
     public record AddSubject(String scopeId, SubjectInput subject) {}
-    public record UpdateSubject(String subjectId, String kind, String name, Map<String, Object> metadata) {}
+    public record UpdateSubject(String subjectId, String kind, String name, Map<String, Object> metadata, Boolean replaceMetadata) {}
     public record RemoveSubject(String subjectId) {}
     public record MoveSubject(String subjectId, String newScopeId) {}
 
@@ -30,7 +30,8 @@ public final class CommandPayloads {
             String name,
             Map<String, Object> metadata,
             Map<String, EntitlementValue> properties,
-            List<EntitlementDefinition> entitlementDefinitions
+            List<EntitlementDefinition> entitlementDefinitions,
+            Boolean replace
     ) {}
     public record RemoveResource(String resourceId) {}
 

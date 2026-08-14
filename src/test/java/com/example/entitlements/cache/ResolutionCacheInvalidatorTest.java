@@ -6,6 +6,8 @@ import com.example.entitlements.testutil.TestFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResolutionCacheInvalidatorTest {
@@ -24,6 +26,17 @@ class ResolutionCacheInvalidatorTest {
         cache.put(new ResolutionKey("acme", "charlie", "api", "api.requests"), "g-eng-quota");
         cache.put(new ResolutionKey("acme", "eve", "api", "api.requests"), "g-root-quota");
         cache.put(new ResolutionKey("acme", "alice", "gpu", "gpu.hours"), "g-gpu");
+    }
+
+    @Test
+    void invalidateTenantClearsOnlyThatTenant() {
+        cache.put(new ResolutionKey("other", "alice", "api", "api.requests"), "g-other");
+        invalidator.invalidateTenant("acme");
+
+        assertTrue(cache.get(new ResolutionKey("acme", "alice", "api", "api.requests")).isEmpty());
+        assertTrue(cache.get(new ResolutionKey("acme", "bob", "api", "api.requests")).isEmpty());
+        assertTrue(cache.get(new ResolutionKey("acme", "alice", "gpu", "gpu.hours")).isEmpty());
+        assertEquals(Optional.of("g-other"), cache.get(new ResolutionKey("other", "alice", "api", "api.requests")));
     }
 
     @Test

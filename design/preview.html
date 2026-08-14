@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>VERA — Resource Entitlement Control Plane</title>
+<style>
+:root{
+  --bg:#f7f8fc; --surface:#fff; --surface2:#fbfcff; --text:#101828; --muted:#667085;
+  --line:#e5e7eb; --brand:#4f46e5; --brand2:#7c3aed; --soft:#eef2ff;
+  --green:#15803d; --greenbg:#ecfdf3; --amber:#a16207; --amberbg:#fffbeb;
+  --red:#b42318; --redbg:#fff1f0; --shadow:0 16px 50px rgba(16,24,40,.07);
+}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input,select,textarea{font:inherit} button{cursor:pointer} a{text-decoration:none;color:inherit}
+.app{min-height:100vh}.topbar{height:70px;background:rgba(255,255,255,.9);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 34px;position:sticky;top:0;z-index:30}
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:19px;letter-spacing:-.03em}.brandmark{width:34px;height:34px;border-radius:11px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;display:grid;place-items:center;box-shadow:0 8px 24px rgba(79,70,229,.24)}
+.topactions{display:flex;align-items:center;gap:9px}.btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:10px 14px;border-radius:10px;font-size:12px;font-weight:800}.btn.primary{background:linear-gradient(135deg,var(--brand),var(--brand2));border-color:var(--brand);color:#fff}.btn.soft{background:var(--soft);border-color:#dce1ff;color:#4338ca}.btn.small{padding:7px 10px;font-size:10px}.btn.danger{color:var(--red);border-color:#f0c5c1}
+.page{display:none}.page.active{display:block}.wrap{max-width:1160px;margin:0 auto;padding:0 28px}
+.hero{min-height:calc(100vh - 70px);display:grid;grid-template-columns:1.08fr .92fr;gap:64px;align-items:center;padding:68px 0}
+.eyebrow{display:inline-flex;padding:6px 10px;border-radius:999px;background:var(--soft);color:#4338ca;font-size:10px;font-weight:900;letter-spacing:.07em;text-transform:uppercase}
+.hero h1{font-size:56px;line-height:1.03;letter-spacing:-.055em;margin:18px 0 16px}.hero h1 span{background:linear-gradient(135deg,var(--brand),var(--brand2));-webkit-background-clip:text;color:transparent}
+.hero p,.lead{color:var(--muted);line-height:1.7;font-size:14px}.heroactions{display:flex;gap:10px;margin-top:26px}.visual{background:#fff;border:1px solid var(--line);border-radius:26px;padding:22px;box-shadow:var(--shadow)}.visual h3{font-size:13px;margin:0}.visual p{font-size:11px;margin:5px 0 0}
+.flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:20px}.node{background:#fff;border:1px solid var(--line);padding:10px 12px;border-radius:11px;font-size:10px;font-weight:800}.node.brandnode{background:var(--soft);border-color:#c7d2fe;color:#4338ca}.arrow{color:#98a2b3;font-weight:900}
+.minigrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:18px}.minicard{background:#f9fafb;border:1px solid #eef0f3;border-radius:12px;padding:13px}.minicard b{font-size:11px}.minicard div{font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4}
+
+/* onboarding */
+.center{text-align:center}.onboard{max-width:860px;margin:0 auto;padding:52px 24px 70px}.center h2{font-size:33px;letter-spacing:-.04em;margin:10px 0 8px}.center p{font-size:13px;color:var(--muted);margin:0;line-height:1.6}
+.progress{display:flex;justify-content:center;gap:8px;margin:28px 0 32px}.prog{width:52px;height:6px;border-radius:999px;background:#e5e7eb}.prog.active{background:linear-gradient(90deg,var(--brand),var(--brand2))}
+.slider{overflow:hidden}.slides{display:flex;transition:transform .42s ease}.slide{min-width:100%;padding:2px}.setup{background:#fff;border:1px solid var(--line);border-radius:24px;padding:28px;box-shadow:var(--shadow)}.tag{display:inline-flex;padding:6px 9px;border-radius:999px;background:var(--soft);color:#4338ca;font-size:10px;font-weight:900}.setup h3{font-size:24px;letter-spacing:-.03em;margin:13px 0 6px}.setup p{font-size:12px;color:var(--muted);line-height:1.6;margin:0}.drop{margin-top:22px;border:1.5px dashed #cfd4df;border-radius:17px;background:#fbfcfe;min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px}.dropicon{width:42px;height:42px;border-radius:13px;background:var(--soft);color:#4338ca;display:grid;place-items:center;font-weight:900;margin-bottom:10px}.drop b{font-size:12px}.drop span{font-size:10px;color:var(--muted);margin-top:5px}.cardactions{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:18px}.actionrow{display:flex;gap:8px;flex-wrap:wrap}
+
+/* validation */
+.validation{max-width:900px;margin:0 auto;padding:52px 24px 72px}.vcard{margin-top:28px;background:#fff;border:1px solid var(--line);border-radius:24px;padding:26px;box-shadow:var(--shadow)}.checkrow{display:grid;grid-template-columns:32px 1fr auto;gap:12px;align-items:center;padding:14px 0;border-bottom:1px solid #eef0f4}.checkrow:last-child{border-bottom:0}.checkicon{width:29px;height:29px;border-radius:9px;background:var(--greenbg);color:var(--green);display:grid;place-items:center;font-weight:900}.checktitle{font-size:12px;font-weight:850}.checksub{font-size:10px;color:var(--muted);margin-top:3px}.pass{font-size:9px;font-weight:900;color:var(--green)}.validsummary{margin-top:18px;padding:14px 16px;border-radius:14px;background:var(--greenbg);border:1px solid #c9efd6;color:#166534;font-size:11px}.right{display:flex;justify-content:flex-end;margin-top:18px}
+
+/* workspace */
+.workspaceShell{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 70px)}.sidebar{background:#fff;border-right:1px solid var(--line);padding:22px 14px;position:sticky;top:70px;height:calc(100vh - 70px)}.slabel{font-size:9px;color:#98a2b3;font-weight:900;text-transform:uppercase;letter-spacing:.08em;padding:13px 10px 7px}.nav{display:flex;flex-direction:column;gap:4px}.nav button{border:0;background:transparent;text-align:left;padding:10px 11px;border-radius:9px;color:#525866;font-size:11px;font-weight:750}.nav button:hover,.nav button.active{background:var(--soft);color:#4338ca}.tenantbox{margin-top:20px;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fafbff}.tenantbox b{font-size:11px}.tenantbox div{font-size:9px;color:var(--muted);margin-top:3px}
+.workcontent{padding:30px;min-width:0}.workpage{display:none;max-width:1100px;margin:0 auto}.workpage.active{display:block}.workhead{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:22px}.workhead h2{font-size:28px;letter-spacing:-.04em;margin:3px 0 5px}.workhead p{font-size:11px;color:var(--muted);margin:0}
+.summarygrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.summary{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px}.summary .label{font-size:10px;color:var(--muted);font-weight:800}.summary .num{font-size:23px;font-weight:900;letter-spacing:-.04em;margin-top:7px}.summary .small{font-size:9px;color:#98a2b3;margin-top:4px}.panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.paneltitle{font-size:12px;font-weight:850}.panelsub{font-size:10px;color:var(--muted);margin-top:4px}.code{margin-top:12px;background:#111827;color:#e5e7eb;padding:12px;border-radius:10px;font:10px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}.tinylist{margin-top:12px}.tinyrow{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #f0f1f4;font-size:10px}.tinyrow:last-child{border-bottom:0}.tinyrow span:last-child{color:var(--muted)}
+.note{font-size:9px;color:#98a2b3;margin-top:16px}
+
+/* expandable org/resources */
+.treegroup,.resourceCard{background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:9px;overflow:hidden}.rowbtn{width:100%;border:0;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:13px 14px;text-align:left}.rowbtn:hover{background:#fafbff}.leftlabel{display:flex;align-items:center;gap:9px}.chev{width:18px;height:18px;border-radius:6px;background:#f2f4f7;display:grid;place-items:center;font-size:9px;color:#667085}.rowtitle{font-size:11px;font-weight:850}.rowsub{font-size:9px;color:var(--muted);margin-top:2px}.expand{display:none;border-top:1px solid #eef0f4;background:#fcfcfe;padding:12px 14px}.expand.open{display:block}.nested{margin-left:18px;margin-top:8px}.inlineActions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.entitlement{border:1px solid #e8eaf0;border-radius:11px;background:#fff;margin-top:8px}.entitlementHead{padding:11px 12px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}.entitlementBody{display:none;padding:0 12px 12px}.entitlementBody.open{display:block}.grant{border:1px solid #eceef2;border-radius:9px;margin-top:8px}.grantHead{padding:10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;background:#fbfcff}.grantBody{display:none;padding:10px;border-top:1px solid #eef0f4}.grantBody.open{display:block}.liveusers{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.userpill{padding:6px 8px;border-radius:999px;background:var(--greenbg);color:#166534;font-size:9px;font-weight:800}
+
+/* histories */
+.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:13px;background:#fff}table{width:100%;border-collapse:collapse;font-size:10px}th,td{padding:11px 12px;text-align:left;border-bottom:1px solid #eef0f4;white-space:nowrap}th{background:#fafbfc;color:#667085;font-size:9px;text-transform:uppercase;letter-spacing:.04em}tr:last-child td{border-bottom:0}.badge{display:inline-flex;padding:4px 7px;border-radius:999px;font-size:8px;font-weight:900}.badd{background:#ecfdf3;color:#15803d}.bupd{background:#eef2ff;color:#4338ca}.brem{background:#fff1f0;color:#b42318}.bbucket{background:#f3f4f6;color:#475467}.bevent{background:#f5f3ff;color:#6d28d9}
+
+/* bulk wizard */
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.35);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:20px;z-index:60}.overlay.show{display:flex}.modal{width:min(860px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 30px 80px rgba(16,24,40,.22);padding:22px}.modalhead{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}.modal h3{font-size:21px;letter-spacing:-.03em;margin:0}.modal p{font-size:10px;color:var(--muted);margin:5px 0 0}.close{border:0;background:#f2f4f7;width:32px;height:32px;border-radius:9px;font-weight:900}.bulksteps{display:flex;gap:7px;margin:18px 0}.bulkstep{height:5px;flex:1;border-radius:999px;background:#e5e7eb}.bulkstep.active{background:linear-gradient(90deg,var(--brand),var(--brand2))}
+.bulkpanel{display:none}.bulkpanel.active{display:block}.selectgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.selectCard{border:1px solid var(--line);border-radius:14px;padding:15px;position:relative;cursor:pointer;background:#fff}.selectCard.selected{border-color:#b9c2ff;background:#fbfbff;box-shadow:0 0 0 3px #f0f2ff}.tick{position:absolute;right:12px;top:12px;width:22px;height:22px;border-radius:7px;background:#f2f4f7;display:grid;place-items:center;color:#98a2b3;font-weight:900;font-size:10px}.selectCard.selected .tick{background:var(--brand);color:#fff}.selectCard b{font-size:11px}.selectCard div{font-size:9px;color:var(--muted);margin-top:4px;line-height:1.45}
+.mode{margin-top:10px;width:100%;border:1px solid var(--line);border-radius:8px;padding:7px;background:#fff;font-size:10px}
+.bulkInput{border:1px solid var(--line);border-radius:14px;padding:15px;margin-top:10px;background:#fbfcff}.bulkInput h4{font-size:11px;margin:0}.bulkInput p{font-size:9px;margin:4px 0 10px}.inputRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.jsonbox{width:100%;height:100px;border:1px solid var(--line);border-radius:9px;padding:10px;background:#fff;font:10px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical}.modalactions{display:flex;justify-content:space-between;gap:10px;margin-top:18px}.summaryline{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:12px}.impact{border:1px solid var(--line);border-radius:11px;padding:11px;background:#fff}.impact b{font-size:17px}.impact div{font-size:8px;color:var(--muted);margin-top:2px}.callout{margin-top:12px;padding:12px 13px;border-radius:11px;font-size:10px;line-height:1.5}.success{background:var(--greenbg);border:1px solid #c9efd6;color:#166534}.warn{background:var(--amberbg);border:1px solid #f1dfad;color:#8a5a09}
+
+/* auth */
+.authShell{max-width:980px;margin:0 auto;padding:64px 24px 80px;display:grid;grid-template-columns:.92fr 1.08fr;gap:26px;align-items:stretch}
+.authIntro{padding:34px 22px}.authIntro h2{font-size:36px;letter-spacing:-.045em;margin:14px 0 10px}.authIntro p{font-size:12px;color:var(--muted);line-height:1.7}.authPoints{margin-top:24px;display:grid;gap:10px}.authPoint{display:flex;gap:11px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #eceef3}.authPoint:last-child{border-bottom:0}.authIcon{width:30px;height:30px;border-radius:10px;background:var(--soft);color:#4338ca;display:grid;place-items:center;font-size:11px;font-weight:900;flex:0 0 auto}.authPoint b{display:block;font-size:11px}.authPoint span{display:block;font-size:9px;color:var(--muted);line-height:1.5;margin-top:3px}
+.authCard{background:#fff;border:1px solid var(--line);border-radius:24px;padding:28px;box-shadow:var(--shadow)}.authCard h3{font-size:23px;letter-spacing:-.03em;margin:6px 0 7px}.authCard>p{font-size:11px;color:var(--muted);line-height:1.6;margin:0 0 22px}.field{margin-top:14px}.field label{display:block;font-size:10px;font-weight:850;margin-bottom:6px}.field input{width:100%;border:1px solid #d8dce5;border-radius:10px;padding:11px 12px;outline:none;background:#fff}.field input:focus{border-color:#a5b4fc;box-shadow:0 0 0 3px #eef2ff}.authSubmit{width:100%;margin-top:20px}.authSwitch{text-align:center;font-size:10px;color:var(--muted);margin-top:16px}.authSwitch button{border:0;background:transparent;color:#4338ca;font-weight:850;cursor:pointer}.securityNote{margin-top:18px;border:1px solid #dfe3f7;background:#f8f9ff;border-radius:13px;padding:12px;font-size:9px;color:#5b6474;line-height:1.55}.securityNote b{color:#344054}.sessionChip{display:flex;align-items:center;gap:9px;padding:7px 9px;border:1px solid var(--line);border-radius:999px;background:#fff}.sessionDot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px #dcfce7}.sessionText{font-size:9px;line-height:1.3}.sessionText b{display:block;font-size:10px}.hidden{display:none!important}
+/* api key */
+.keyReveal{max-width:820px;margin:0 auto;padding:58px 24px 80px}.keyHero{text-align:center}.keyCard{margin-top:26px;background:#fff;border:1px solid var(--line);border-radius:22px;padding:26px;box-shadow:var(--shadow)}.keyWarn{background:var(--amberbg);border:1px solid #f4dfaa;color:#854d0e;border-radius:13px;padding:12px 14px;font-size:10px;line-height:1.55}.secretBox{display:flex;gap:10px;align-items:center;margin-top:16px;background:#111827;border-radius:12px;padding:12px}.secretValue{flex:1;color:#f9fafb;font:10px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto;white-space:nowrap}.keyMeta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:15px}.metaCard{border:1px solid var(--line);border-radius:12px;padding:12px}.metaCard span{display:block;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:900}.metaCard b{display:block;font-size:10px;margin-top:5px}.integrationGrid{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}.authStatus{display:inline-flex;align-items:center;gap:7px;font-size:9px;font-weight:850;color:var(--green);background:var(--greenbg);padding:6px 9px;border-radius:999px}.keyPreview{margin-top:12px;padding:12px;border-radius:11px;background:#f9fafb;border:1px solid var(--line);font:10px ui-monospace,SFMono-Regular,Menlo,monospace}.dangerZone{margin-top:14px;border-top:1px solid #eef0f4;padding-top:14px}.inlineStatus{font-size:9px;color:var(--green);font-weight:800;margin-left:8px}
+@media(max-width:900px){.authShell,.integrationGrid{grid-template-columns:1fr}.hero{grid-template-columns:1fr}.hero h1{font-size:44px}.workspaceShell{grid-template-columns:82px 1fr}.sidebar .txt,.slabel,.tenantbox{display:none}.nav button{text-align:center}.summarygrid{grid-template-columns:repeat(2,1fr)}.grid2,.selectgrid{grid-template-columns:1fr}.summaryline{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.keyMeta{grid-template-columns:1fr}.topbar{padding:0 16px}.wrap{padding:0 16px}.hero h1{font-size:36px}.heroactions,.cardactions,.workhead{flex-direction:column;align-items:stretch}.minigrid,.summarygrid,.summaryline{grid-template-columns:1fr}.workspaceShell{display:block}.sidebar{position:static;height:auto;display:flex;overflow:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px}.nav{flex-direction:row}.workcontent{padding:18px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="topbar">
+  <div class="brand" onclick="go('landing')" style="cursor:pointer"><div class="brandmark">V</div>VERA</div>
+  <div class="topactions" id="publicActions">
+    <button class="btn" onclick="openDemoWorkspace()">Demo workspace</button>
+    <button class="btn" onclick="go('login')">Sign in</button>
+    <button class="btn primary" onclick="go('signup')">Get started</button>
+  </div>
+  <div class="topactions hidden" id="sessionActions">
+    <div class="sessionChip"><span class="sessionDot"></span><div class="sessionText"><b>admin@acme.com</b>Session active</div></div>
+    <button class="btn" onclick="logoutMock()">Log out</button>
+  </div>
+</header>
+
+<!-- LANDING -->
+<section class="page active" id="landing">
+<div class="wrap"><div class="hero">
+  <div>
+    <div class="eyebrow">General-purpose resource entitlement control plane</div>
+    <h1>Define <span>who can use what</span> — across any organization and any resource.</h1>
+    <p>
+      VERA is a highly generalizable entitlement engine for companies, universities, research labs,
+      GPU clusters, hospitals, internal platforms and more. You describe your own hierarchy,
+      resources and access rules — VERA does not hard-code departments, employees, GPUs, APIs or any
+      other organization type.
+    </p>
+
+    <div class="heroactions">
+      <button class="btn primary" onclick="go('signup')">I'm an organization · Get started</button>
+      <button class="btn" onclick="go('login')">Returning admin · Sign in</button>
+    </div>
+
+    <div style="margin-top:28px">
+      <div style="font-size:11px;font-weight:900;margin-bottom:10px">What can VERA control?</div>
+      <div class="minigrid">
+        <div class="minicard">
+          <b>Simple access</b>
+          <div>Allow or deny access with boolean rules.</div>
+        </div>
+        <div class="minicard">
+          <b>Limits & quotas</b>
+          <div>Monthly GPU hours, request counts, storage limits and numeric allowances.</div>
+        </div>
+        <div class="minicard">
+          <b>Rate limits</b>
+          <div>Control how quickly APIs or shared systems may be used.</div>
+        </div>
+        <div class="minicard">
+          <b>Ranges</b>
+          <div>Allow values only inside a permitted minimum and maximum.</div>
+        </div>
+        <div class="minicard">
+          <b>Allowed sets</b>
+          <div>Choose permitted GPU models, datasets, regions, API models or tools.</div>
+        </div>
+        <div class="minicard">
+          <b>Time & custom values</b>
+          <div>Access windows, tiers, labels and other text-based controls.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="visual">
+    <h3>One engine, many environments</h3>
+    <p>VERA models your world instead of forcing your world into a fixed schema.</p>
+
+    <div class="minigrid">
+      <div class="minicard"><b>Company</b><div>Company → department → team → employee.</div></div>
+      <div class="minicard"><b>University</b><div>University → school → lab → student.</div></div>
+      <div class="minicard"><b>Research / GPU lab</b><div>Lab → project → researcher → compute resources.</div></div>
+    </div>
+
+    <div style="height:1px;background:#eef0f3;margin:20px 0"></div>
+
+    <h3>VERA stays in the control plane</h3>
+    <p>Your application still authenticates users and performs the actual resource operation.</p>
+    <div class="flow">
+      <div class="node">User / Service</div>
+      <div class="arrow">→</div>
+      <div class="node">Your app</div>
+      <div class="arrow">→</div>
+      <div class="node brandnode">VERA</div>
+      <div class="arrow">→</div>
+      <div class="node">ALLOW / DENY</div>
+    </div>
+
+    <div class="minigrid">
+      <div class="minicard"><b>Organization</b><div>Your own recursive hierarchy.</div></div>
+      <div class="minicard"><b>Resources</b><div>GPUs, APIs, storage, data, licenses, equipment.</div></div>
+      <div class="minicard"><b>Grants</b><div>Rules inherited from scopes or assigned directly.</div></div>
+    </div>
+  </div>
+</div></div>
+</section>
+
+<!-- SIGNUP -->
+<section class="page" id="signup">
+  <div class="authShell">
+    <div class="authIntro">
+      <div class="eyebrow">Create your VERA workspace</div>
+      <h2>One administrator. One organization.</h2>
+      <p>For V1, each tenant has one VERA administrator. Create the admin identity first, then configure organization, resources and grants.</p>
+      <div class="authPoints">
+        <div class="authPoint"><div class="authIcon">1</div><div><b>Admin session</b><span>After signup, VERA creates a server-side session. The browser keeps only the HttpOnly JSESSIONID cookie.</span></div></div>
+        <div class="authPoint"><div class="authIcon">2</div><div><b>Tenant isolation</b><span>Your authenticated session is bound to one tenant and cannot manage another tenant by changing a URL.</span></div></div>
+        <div class="authPoint"><div class="authIcon">3</div><div><b>Runtime key comes later</b><span>After successful registration, VERA reveals one API key for your company backend exactly once.</span></div></div>
+      </div>
+    </div>
+    <div class="authCard">
+      <div class="tag">ADMIN ACCOUNT</div>
+      <h3>Create your admin login</h3>
+      <p>These credentials are collected for the final atomic signup. Nothing is persisted until you validate the three configs and create the workspace. The admin login stays separate from the runtime API key.</p>
+      <div class="field"><label>Work email</label><input id="signupEmail" type="email" value="admin@acme.com" placeholder="admin@company.com"></div>
+      <div class="field"><label>Password</label><input type="password" value="sample-password" placeholder="At least 12 characters"></div>
+      <button class="btn primary authSubmit" onclick="go('onboarding')">Continue to configuration</button>
+      <div class="authSwitch">Already have a workspace? <button onclick="go('login')">Sign in</button></div>
+      <div class="securityNote"><b>What happens technically:</b> the final signup request is CSRF-protected, the password is hashed, and the authenticated SecurityContext is stored in the server-side HttpSession.</div>
+    </div>
+  </div>
+</section>
+
+<!-- LOGIN -->
+<section class="page" id="login">
+  <div class="authShell">
+    <div class="authIntro">
+      <div class="eyebrow">VERA admin</div>
+      <h2>Sign in to your workspace.</h2>
+      <p>Use the administrator credentials created during company signup. VERA does not issue a JWT for this browser flow.</p>
+      <div class="visual" style="margin-top:24px">
+        <h3>Session flow</h3><p>The browser only carries an opaque session identifier.</p>
+        <div class="flow"><div class="node">Email + password</div><div class="arrow">→</div><div class="node brandnode">VERA</div><div class="arrow">→</div><div class="node">JSESSIONID</div></div>
+        <div class="securityNote"><b>Server side:</b> JSESSIONID maps to admin@acme.com → tenant acme. The session expires after inactivity and is invalidated on logout.</div>
+      </div>
+    </div>
+    <div class="authCard">
+      <div class="tag">WELCOME BACK</div>
+      <h3>Administrator sign in</h3>
+      <p>For this mockup, the form enters the Acme workspace.</p>
+      <div class="field"><label>Email</label><input type="email" value="admin@acme.com"></div>
+      <div class="field"><label>Password</label><input type="password" value="sample-password"></div>
+      <button class="btn primary authSubmit" onclick="loginMock()">Sign in</button>
+      <div class="authSwitch">New organization? <button onclick="go('signup')">Create workspace</button></div>
+      <div class="securityNote"><b>CSRF:</b> the frontend first obtains the XSRF token, then sends it with this session-authenticated mutation.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ONBOARDING -->
+<section class="page" id="onboarding">
+<div class="onboard">
+  <div class="center"><div class="eyebrow">Configuration · admin@acme.com</div><h2>Configure VERA in three steps</h2><p>Your admin credentials are ready. Now provide the three logical JSON configuration domains.</p></div>
+  <div class="progress"><div class="prog active" id="p1"></div><div class="prog" id="p2"></div><div class="prog" id="p3"></div></div>
+  <div class="slider"><div class="slides" id="slides">
+    <div class="slide"><div class="setup"><div class="tag">STEP 1 OF 3</div><h3>Organization structure</h3><p>Tenant identity, recursive scopes and subjects.</p><div class="drop"><div class="dropicon">O</div><b>organization.json</b><span>Company + hierarchy + subjects</span><input type="file" accept=".json,application/json" style="margin-top:15px;font-size:10px" onchange="setTimeout(()=>setStep(2),250)"></div><div class="cardactions"><button class="btn soft" onclick="downloadTemplate('organization')">Download JSON template</button><button class="btn primary" onclick="setStep(2)">Use sample & continue</button></div></div></div>
+    <div class="slide"><div class="setup"><div class="tag">STEP 2 OF 3</div><h3>Resource catalog</h3><p>Resources, facts and grantable entitlement definitions.</p><div class="drop"><div class="dropicon">R</div><b>resources.json</b><span>Resources + properties + definitions</span><input type="file" accept=".json,application/json" style="margin-top:15px;font-size:10px" onchange="setTimeout(()=>setStep(3),250)"></div><div class="cardactions"><button class="btn soft" onclick="downloadTemplate('resources')">Download JSON template</button><div class="actionrow"><button class="btn" onclick="setStep(1)">Back</button><button class="btn primary" onclick="setStep(3)">Use sample & continue</button></div></div></div></div>
+    <div class="slide"><div class="setup"><div class="tag">STEP 3 OF 3</div><h3>Grants</h3><p>Assign one entitlement value to one scope/subject for one resource key.</p><div class="drop"><div class="dropicon">G</div><b>grants.json</b><span>Targets + resources + entitlements + values</span><input type="file" accept=".json,application/json" style="margin-top:15px;font-size:10px"></div><div class="cardactions"><button class="btn soft" onclick="downloadTemplate('grants')">Download JSON template</button><div class="actionrow"><button class="btn" onclick="setStep(2)">Back</button><button class="btn primary" onclick="go('validation')">Validate configuration</button></div></div></div></div>
+  </div></div>
+</div>
+</section>
+
+<!-- VALIDATION -->
+<section class="page" id="validation">
+<div class="validation">
+  <div class="center"><div class="eyebrow">Validation</div><h2>Everything looks good</h2><p>VERA validates the projected final tenant before anything is registered.</p></div>
+  <div class="vcard">
+    <div class="checkrow"><div class="checkicon">✓</div><div><div class="checktitle">Organization structure</div><div class="checksub">Unique IDs · valid root · valid hierarchy</div></div><div class="pass">PASSED</div></div>
+    <div class="checkrow"><div class="checkicon">✓</div><div><div class="checktitle">Resources</div><div class="checksub">Unique resource IDs · valid definitions and types</div></div><div class="pass">PASSED</div></div>
+    <div class="checkrow"><div class="checkicon">✓</div><div><div class="checktitle">Grants</div><div class="checksub">Targets, resources and entitlement keys all exist</div></div><div class="pass">PASSED</div></div>
+    <div class="checkrow"><div class="checkicon">✓</div><div><div class="checktitle">Cross-domain validation</div><div class="checksub">0 invalid surviving grants · 0 broken references</div></div><div class="pass">PASSED</div></div>
+    <div class="validsummary"><b>Ready to register.</b> 43 scopes · 2,481 subjects · 18 resources · 61 entitlement definitions · 76 grants.</div>
+    <div class="right"><button class="btn primary" onclick="finishSignup()">Create workspace & API key</button></div>
+  </div>
+</div>
+</section>
+
+<!-- API KEY REVEAL -->
+<section class="page" id="api-key-reveal">
+  <div class="keyReveal">
+    <div class="keyHero"><div class="eyebrow">Workspace created</div><h2 style="font-size:34px;letter-spacing:-.04em;margin:12px 0 8px">Save your runtime API key</h2><p class="lead" style="max-width:610px;margin:0 auto">Your admin session is already active. This separate key authenticates Acme's backend when it calls the VERA runtime gateway.</p></div>
+    <div class="keyCard">
+      <div class="keyWarn"><b>Shown once.</b> Copy this key into your backend secret manager now. VERA stores only its public id and a BCrypt hash of the secret.</div>
+      <div class="secretBox"><div class="secretValue" id="rawKey">vera_live_K3px9Bc2.D3moOnly9xR5p2q7Vt8Nw4Zs1Lm6Qa0Ef</div><button class="btn small" onclick="copyKey()">Copy key</button></div>
+      <div id="copyStatus" class="note">Use as: <b>X-VERA-API-KEY</b></div>
+      <div class="keyMeta"><div class="metaCard"><span>Tenant</span><b>acme</b></div><div class="metaCard"><span>Gateway</span><b>/api/gateway/tenants/acme</b></div><div class="metaCard"><span>Session</span><b style="color:var(--green)">Admin signed in</b></div></div>
+      <div class="code" style="margin-top:16px">X-VERA-API-KEY: vera_live_K3px9Bc2.••••••••••••••••</div>
+      <div class="cardactions"><span class="note" style="margin:0">You can rotate the key later, but the existing raw secret will never be displayed again.</span><button class="btn primary" onclick="enterWorkspace()">Continue to workspace</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- WORKSPACE -->
+<section class="page" id="workspace">
+<div class="workspaceShell">
+  <aside class="sidebar">
+    <div class="slabel">Workspace</div>
+    <div class="nav">
+      <button class="active" data-work="overview" onclick="workGo('overview',this)"><span class="txt">Overview</span></button>
+      <button data-work="organization" onclick="workGo('organization',this)"><span class="txt">Organization</span></button>
+      <button data-work="resources" onclick="workGo('resources',this)"><span class="txt">Resources</span></button>
+      <button data-work="integration" onclick="workGo('integration',this)"><span class="txt">Integration</span></button>
+      <button data-work="ent-history" onclick="workGo('ent-history',this)"><span class="txt">Entitlement History</span></button>
+      <button data-work="usage-history" onclick="workGo('usage-history',this)"><span class="txt">Usage History</span></button>
+    </div>
+    <div class="tenantbox"><b>Acme Corporation</b><div>tenant: acme</div><div style="color:var(--green);margin-top:7px">● admin session active</div></div>
+  </aside>
+
+  <main class="workcontent">
+    <!-- Overview -->
+    <div class="workpage active" id="w-overview">
+      <div class="workhead"><div><div class="eyebrow">Acme Corporation</div><h2>Workspace</h2><p>Short operational summary.</p></div><button class="btn primary" onclick="openBulk()">Bulk upload / changes</button></div>
+      <div class="summarygrid">
+        <div class="summary"><div class="label">Subjects</div><div class="num">2,481</div><div class="small">43 scopes</div></div>
+        <div class="summary"><div class="label">Resources</div><div class="num">18</div><div class="small">61 definitions</div></div>
+        <div class="summary"><div class="label">Grants</div><div class="num">76</div><div class="small">0 invalid</div></div>
+        <div class="summary"><div class="label">Gateway</div><div class="num" style="font-size:20px;color:var(--green)">Ready</div><div class="small">runtime API</div></div>
+      </div>
+      <div class="grid2" style="margin-top:14px">
+        <div class="panel"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><div class="paneltitle">Company gateway</div><div class="panelsub">Machine-to-machine runtime API.</div></div><span class="authStatus">● API key protected</span></div><div class="code">/api/gateway/tenants/acme</div><div class="tinylist"><div class="tinyrow"><span>Authentication</span><span>X-VERA-API-KEY</span></div><div class="tinyrow"><span>Evaluate</span><span>POST /evaluate</span></div><div class="tinyrow"><span>Consume / use</span><span>runtime endpoints</span></div></div><button class="btn small soft" style="margin-top:10px" onclick="openIntegration()">Manage integration</button></div>
+        <div class="panel"><div class="paneltitle">Configuration health</div><div class="panelsub">Projected state is consistent.</div><div class="tinylist"><div class="tinyrow"><span>Invalid grants</span><span style="color:var(--green);font-weight:800">0</span></div><div class="tinyrow"><span>Resources</span><span>18</span></div><div class="tinyrow"><span>Last change</span><span>Today</span></div><div class="tinyrow"><span>Bulk sync</span><span>Available</span></div></div></div>
+      </div>
+      <div class="note">VERA decides entitlement. Your company still authenticates users and performs the real resource operation.</div>
+    </div>
+
+    <!-- Organization -->
+    <div class="workpage" id="w-organization">
+      <div class="workhead"><div><div class="eyebrow">Organization</div><h2>Structure</h2><p>Expand only the scopes you want to inspect or edit.</p></div><button class="btn primary" onclick="openBulk('organization')">Bulk organization change</button></div>
+
+      <div class="treegroup">
+        <button class="rowbtn" onclick="toggleExpand('org-root')"><div class="leftlabel"><div class="chev">›</div><div><div class="rowtitle">Acme Corporation</div><div class="rowsub">company · root · 2,481 subjects</div></div></div><span class="rowsub">expand</span></button>
+        <div class="expand" id="org-root">
+          <div class="inlineActions"><button class="btn small soft">Add child scope</button><button class="btn small">Edit scope</button><button class="btn small">Add subject</button></div>
+
+          <div class="nested">
+            <div class="treegroup">
+              <button class="rowbtn" onclick="toggleExpand('org-eng')"><div class="leftlabel"><div class="chev">›</div><div><div class="rowtitle">Engineering</div><div class="rowsub">department · 1,240 subjects</div></div></div><span class="rowsub">expand</span></button>
+              <div class="expand" id="org-eng">
+                <div class="inlineActions"><button class="btn small soft">Add child scope</button><button class="btn small">Edit</button><button class="btn small">Move</button></div>
+                <div class="nested">
+                  <div class="treegroup">
+                    <button class="rowbtn" onclick="toggleExpand('org-backend')"><div class="leftlabel"><div class="chev">›</div><div><div class="rowtitle">Backend</div><div class="rowsub">team · 412 subjects</div></div></div></button>
+                    <div class="expand" id="org-backend">
+                      <div class="tinyrow"><span>Alice · emp-1001</span><span><button class="btn small">Edit</button> <button class="btn small">Move</button></span></div>
+                      <div class="tinyrow"><span>Bob · emp-1002</span><span><button class="btn small">Edit</button> <button class="btn small">Move</button></span></div>
+                      <div class="inlineActions"><button class="btn small primary">Add subject</button></div>
+                    </div>
+                  </div>
+                  <div class="treegroup">
+                    <button class="rowbtn" onclick="toggleExpand('org-ml')"><div class="leftlabel"><div class="chev">›</div><div><div class="rowtitle">ML</div><div class="rowsub">team · 287 subjects</div></div></div></button>
+                    <div class="expand" id="org-ml"><div class="tinyrow"><span>Charlie · emp-1003</span><span><button class="btn small">Edit</button></span></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="treegroup">
+              <button class="rowbtn" onclick="toggleExpand('org-marketing')"><div class="leftlabel"><div class="chev">›</div><div><div class="rowtitle">Marketing</div><div class="rowsub">department · 340 subjects</div></div></div></button>
+              <div class="expand" id="org-marketing"><div class="inlineActions"><button class="btn small soft">Add child scope</button><button class="btn small">Edit scope</button></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resources -->
+    <div class="workpage" id="w-resources">
+      <div class="workhead"><div><div class="eyebrow">Resources</div><h2>Resource catalog</h2><p>Open a resource, then expand an entitlement to inspect its grants and live users.</p></div><button class="btn primary" onclick="openBulk('resources')">Bulk resource change</button></div>
+
+      <div class="resourceCard">
+        <button class="rowbtn" onclick="toggleExpand('res-gpu')"><div class="leftlabel"><div class="chev">›</div><div><div class="rowtitle">GPU Cluster</div><div class="rowsub">compute · 3 entitlement definitions</div></div></div><span class="rowsub">100 gpu capacity</span></button>
+        <div class="expand" id="res-gpu">
+          <div class="inlineActions"><button class="btn small">Edit resource</button><button class="btn small soft">Add entitlement definition</button></div>
+
+          <div class="entitlement">
+            <div class="entitlementHead" onclick="toggleEnt('ent-hours')"><div><div class="rowtitle">gpu.hours</div><div class="rowsub">QUOTA · monthly GPU-hour allowance</div></div><span class="rowsub">3 grants</span></div>
+            <div class="entitlementBody" id="ent-hours">
+              <div class="grant">
+                <div class="grantHead" onclick="toggleGrant('grant-eng-hours')"><div><div class="rowtitle">g-eng-hours</div><div class="rowsub">Engineering · 5,000 gpu-hour / month</div></div><span class="rowsub">live users</span></div>
+                <div class="grantBody" id="grant-eng-hours"><div class="rowsub">Subjects currently resolving to this grant</div><div class="liveusers"><span class="userpill">Alice</span><span class="userpill">Bob</span><span class="userpill">Charlie</span><span class="userpill">+236 more</span></div><div class="tinyrow"><span>Consumed this month</span><span>3,420 / 5,000</span></div></div>
+              </div>
+              <div class="grant"><div class="grantHead" onclick="toggleGrant('grant-ml-hours')"><div><div class="rowtitle">g-ml-hours</div><div class="rowsub">ML · 2,000 gpu-hour / month</div></div><span class="rowsub">live users</span></div><div class="grantBody" id="grant-ml-hours"><div class="liveusers"><span class="userpill">Charlie</span><span class="userpill">+41 more</span></div></div></div>
+            </div>
+          </div>
+
+          <div class="entitlement">
+            <div class="entitlementHead" onclick="toggleEnt('ent-types')"><div><div class="rowtitle">gpu.allowedTypes</div><div class="rowsub">SET · allowed GPU models</div></div><span class="rowsub">2 grants</span></div>
+            <div class="entitlementBody" id="ent-types">
+              <div class="grant"><div class="grantHead" onclick="toggleGrant('grant-eng-types')"><div><div class="rowtitle">g-eng-types</div><div class="rowsub">Engineering · A100, H100</div></div><span class="rowsub">live users</span></div><div class="grantBody" id="grant-eng-types"><div class="liveusers"><span class="userpill">Alice</span><span class="userpill">Bob</span><span class="userpill">+245 more</span></div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="resourceCard">
+        <button class="rowbtn" onclick="toggleExpand('res-api')"><div class="leftlabel"><div class="chev">›</div><div><div class="rowtitle">AI API</div><div class="rowsub">api · 8 entitlement definitions</div></div></div><span class="rowsub">open</span></button>
+        <div class="expand" id="res-api"><div class="panelsub">Entitlements include api.enabled, api.requests, api.rateLimit, api.models and more.</div></div>
+      </div>
+    </div>
+
+    <!-- Integration -->
+    <div class="workpage" id="w-integration">
+      <div class="workhead"><div><div class="eyebrow">Security & integration</div><h2>Connect Acme to VERA</h2><p>Human administration uses a session. Runtime calls use a separate tenant-bound API key.</p></div></div>
+      <div class="integrationGrid">
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><div class="paneltitle">Runtime API key</div><div class="panelsub">Used only by Acme's backend for /api/gateway/**.</div></div><span class="authStatus">● Active</span></div>
+          <div class="keyPreview">vera_live_K3px9Bc2.••••••••••••••••••••</div>
+          <div class="tinylist">
+            <div class="tinyrow"><span>Public id</span><span>K3px9Bc2</span></div>
+            <div class="tinyrow"><span>Created</span><span>Aug 15, 2026</span></div>
+            <div class="tinyrow"><span>Last rotated</span><span>Never</span></div>
+            <div class="tinyrow"><span>Header</span><span>X-VERA-API-KEY</span></div>
+          </div>
+          <div class="securityNote"><b>The raw existing key cannot be viewed.</b> VERA keeps only the public id and a hash. Rotating generates a new secret and immediately invalidates the old one.</div>
+          <div class="dangerZone"><button class="btn danger" onclick="rotateKeyMock()">Rotate API key</button><span id="rotateStatus" class="inlineStatus"></span></div>
+          <div id="rotatedKeyBox" class="hidden" style="margin-top:14px"><div class="keyWarn"><b>New key — shown once.</b> Replace the old secret in Acme's backend before leaving this page.</div><div class="secretBox"><div class="secretValue">vera_live_P7vN2Ka4.N3wMockRotatedSecret8fQ2xM5tC9</div><button class="btn small" onclick="copyRotatedKey()">Copy</button></div></div>
+        </div>
+        <div>
+          <div class="panel">
+            <div class="paneltitle">Administrator session</div><div class="panelsub">Used only for this VERA management workspace.</div>
+            <div class="tinylist"><div class="tinyrow"><span>Signed in</span><span>admin@acme.com</span></div><div class="tinyrow"><span>Tenant</span><span>acme</span></div><div class="tinyrow"><span>Session cookie</span><span>JSESSIONID · HttpOnly</span></div><div class="tinyrow"><span>Idle timeout</span><span>30 minutes</span></div><div class="tinyrow"><span>CSRF</span><span>X-XSRF-TOKEN</span></div></div>
+            <div class="securityNote">Changing a path to another tenant does not change identity. The backend checks that the session tenant matches the requested tenant.</div>
+            <button class="btn" style="margin-top:12px" onclick="logoutMock()">Log out of VERA</button>
+          </div>
+          <div class="panel" style="margin-top:14px">
+            <div class="paneltitle">Gateway example</div><div class="panelsub">Store the raw key as a backend secret, not in frontend JavaScript.</div>
+            <div class="code">POST /api/gateway/tenants/acme/evaluate
+X-VERA-API-KEY: ${VERA_API_KEY}
+
+{
+  "subjectId": "emp-1001",
+  "resourceId": "gpu",
+  "entitlementKey": "gpu.enabled",
+  "requestedValue": true
+}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Entitlement History -->
+    <div class="workpage" id="w-ent-history">
+      <div class="workhead"><div><div class="eyebrow">Audit</div><h2>Entitlement history</h2><p>Append-only history of what changed in access configuration.</p></div></div>
+      <div class="tablewrap"><table>
+        <tr><th>Time</th><th>Change</th><th>Resource</th><th>Entitlement</th><th>Target</th><th>Grant</th></tr>
+        <tr><td>14:42</td><td><span class="badge bupd">UPDATED</span></td><td>GPU Cluster</td><td>gpu.hours</td><td>Engineering</td><td>g-eng-hours</td></tr>
+        <tr><td>12:18</td><td><span class="badge brem">REMOVED</span></td><td>Dataset</td><td>data.access</td><td>Research</td><td>g-research-data</td></tr>
+        <tr><td>09:06</td><td><span class="badge badd">CREATED</span></td><td>AI API</td><td>api.models</td><td>ML</td><td>g-ml-models</td></tr>
+      </table></div>
+    </div>
+
+    <!-- Usage History -->
+    <div class="workpage" id="w-usage-history">
+      <div class="workhead"><div><div class="eyebrow">Audit</div><h2>Usage history</h2><p>Successful committed use, with exact events and 5-minute numeric buckets.</p></div></div>
+      <div class="tablewrap"><table>
+        <tr><th>Time</th><th>Type</th><th>Subject</th><th>Resource</th><th>Entitlement</th><th>Usage</th></tr>
+        <tr><td>14:35–14:40</td><td><span class="badge bbucket">BUCKET</span></td><td>Alice</td><td>GPU Cluster</td><td>gpu.hours</td><td>125 gpu-hour · 8 ops</td></tr>
+        <tr><td>14:31:12</td><td><span class="badge bevent">EVENT</span></td><td>Alice</td><td>GPU Cluster</td><td>gpu.allowedTypes</td><td>H100</td></tr>
+        <tr><td>14:30–14:35</td><td><span class="badge bbucket">BUCKET</span></td><td>Bob</td><td>AI API</td><td>api.requests</td><td>842 requests · 842 ops</td></tr>
+      </table></div>
+    </div>
+  </main>
+</div>
+</section>
+
+<!-- BULK WIZARD -->
+<div class="overlay" id="bulkOverlay">
+  <div class="modal">
+    <div class="modalhead"><div><h3>Bulk changes</h3><p>Choose one, two or all three configuration domains.</p></div><button class="close" onclick="closeBulk()">×</button></div>
+    <div class="bulksteps"><div class="bulkstep active" id="bs1"></div><div class="bulkstep" id="bs2"></div><div class="bulkstep" id="bs3"></div></div>
+
+    <div class="bulkpanel active" id="bulk-select">
+      <div class="selectgrid">
+        <div class="selectCard" id="sel-org" onclick="toggleBulk('organization')"><div class="tick">✓</div><b>Organization</b><div>Scopes, subjects, hierarchy changes.</div><select class="mode" onclick="event.stopPropagation()"><option>MERGE</option><option>RECONCILE</option></select></div>
+        <div class="selectCard" id="sel-res" onclick="toggleBulk('resources')"><div class="tick">✓</div><b>Resources</b><div>Catalog, properties, definitions.</div><select class="mode" onclick="event.stopPropagation()"><option>MERGE</option><option>RECONCILE</option></select></div>
+        <div class="selectCard" id="sel-grants" onclick="toggleBulk('grants')"><div class="tick">✓</div><b>Grants</b><div>Assignments and entitlement values.</div><select class="mode" onclick="event.stopPropagation()"><option>MERGE</option><option>RECONCILE</option></select></div>
+      </div>
+      <div class="modalactions"><span></span><button class="btn primary" onclick="bulkNext()">Continue</button></div>
+    </div>
+
+    <div class="bulkpanel" id="bulk-inputs">
+      <div id="bulkInputs"></div>
+      <div class="modalactions"><button class="btn" onclick="bulkBack()">Back</button><button class="btn primary" onclick="bulkValidate()">Validate changes</button></div>
+    </div>
+
+    <div class="bulkpanel" id="bulk-preview">
+      <div class="summaryline">
+        <div class="impact"><b>18</b><div>subjects moved</div></div>
+        <div class="impact"><b>3</b><div>resources updated</div></div>
+        <div class="impact"><b>7</b><div>grants auto-removed</div></div>
+        <div class="impact"><b style="color:var(--green)">0</b><div>invalid grants</div></div>
+      </div>
+      <div class="callout success"><b>Valid projected tenant.</b> Selected changes can be applied together.</div>
+      <div class="callout warn"><b>Impact:</b> 7 grants will be removed because their target/resource is intentionally removed.</div>
+      <div class="modalactions"><button class="btn" onclick="bulkBackToInputs()">Back</button><button class="btn primary" onclick="closeBulk()">Apply changes atomically</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const templates = {
+ organization:{tenant:{id:"acme",name:"Acme Corporation"},structure:{id:"root",kind:"company",name:"Acme Corporation",children:[{id:"engineering",kind:"department",name:"Engineering",children:[{id:"backend",kind:"team",name:"Backend",subjects:[{id:"emp-1001",kind:"employee",name:"Alice"}]}]}]}},
+ resources:{resources:[{id:"gpu",kind:"compute",name:"GPU Cluster",metadata:{region:"us-east"},properties:{capacity:{type:"QUANTITY",value:100,unit:"gpu"}},entitlementDefinitions:[{key:"gpu.enabled",name:"GPU Enabled",valueType:"BOOLEAN"},{key:"gpu.hours",name:"GPU Hours",valueType:"QUOTA"}]}]},
+ grants:{grants:[{id:"g-eng-hours",target:{type:"SCOPE",id:"engineering"},resourceId:"gpu",entitlementKey:"gpu.hours",value:{type:"QUOTA",limit:5000,unit:"gpu-hour",period:"MONTHLY"}}]}
+};
+
+let sessionActive=false;
+function updateAuthChrome(){
+  document.getElementById("publicActions").classList.toggle("hidden",sessionActive);
+  document.getElementById("sessionActions").classList.toggle("hidden",!sessionActive);
+}
+function go(id){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  updateAuthChrome();
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function loginMock(){sessionActive=true;go("workspace")}
+function openDemoWorkspace(){sessionActive=true;go("workspace")}
+function finishSignup(){sessionActive=true;go("api-key-reveal")}
+function enterWorkspace(){go("workspace")}
+function logoutMock(){sessionActive=false;go("landing")}
+function openIntegration(){go("workspace");const btn=document.querySelector('[data-work="integration"]');workGo("integration",btn)}
+function copyKey(){const t=document.getElementById("rawKey").textContent;navigator.clipboard?.writeText(t);document.getElementById("copyStatus").innerHTML='<b style="color:var(--green)">Copied.</b> Store it in your backend secret manager.'}
+function rotateKeyMock(){document.getElementById("rotatedKeyBox").classList.remove("hidden");document.getElementById("rotateStatus").textContent="Old key invalidated"}
+function copyRotatedKey(){const t=document.querySelector("#rotatedKeyBox .secretValue").textContent;navigator.clipboard?.writeText(t)}
+function setStep(n){document.getElementById("slides").style.transform=`translateX(-${(n-1)*100}%)`;[1,2,3].forEach(i=>document.getElementById("p"+i).classList.toggle("active",i<=n))}
+function downloadTemplate(k){const blob=new Blob([JSON.stringify(templates[k],null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=k+".json";a.click();URL.revokeObjectURL(url)}
+function workGo(id,btn){document.querySelectorAll(".workpage").forEach(p=>p.classList.remove("active"));document.getElementById("w-"+id).classList.add("active");document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active"));btn.classList.add("active")}
+function toggleExpand(id){document.getElementById(id).classList.toggle("open")}
+function toggleEnt(id){document.getElementById(id).classList.toggle("open")}
+function toggleGrant(id){document.getElementById(id).classList.toggle("open")}
+
+let selectedBulk = new Set();
+function openBulk(prefill){
+  selectedBulk=new Set();
+  ["organization","resources","grants"].forEach(k=>document.getElementById("sel-"+(k==="organization"?"org":k==="resources"?"res":"grants")).classList.remove("selected"));
+  if(prefill){selectedBulk.add(prefill);document.getElementById("sel-"+(prefill==="organization"?"org":prefill==="resources"?"res":"grants")).classList.add("selected")}
+  document.getElementById("bulkOverlay").classList.add("show");showBulkPanel("select")
+}
+function closeBulk(){document.getElementById("bulkOverlay").classList.remove("show")}
+function toggleBulk(k){const id="sel-"+(k==="organization"?"org":k==="resources"?"res":"grants");const el=document.getElementById(id);if(selectedBulk.has(k)){selectedBulk.delete(k);el.classList.remove("selected")}else{selectedBulk.add(k);el.classList.add("selected")}}
+function showBulkPanel(which){
+  ["select","inputs","preview"].forEach(x=>document.getElementById("bulk-"+x).classList.toggle("active",x===which));
+  document.getElementById("bs1").classList.toggle("active",true);
+  document.getElementById("bs2").classList.toggle("active",which==="inputs"||which==="preview");
+  document.getElementById("bs3").classList.toggle("active",which==="preview");
+}
+function bulkNext(){
+  if(selectedBulk.size===0){alert("Choose at least one domain.");return}
+  const host=document.getElementById("bulkInputs");host.innerHTML="";
+  selectedBulk.forEach(k=>{
+    const title=k[0].toUpperCase()+k.slice(1);
+    const example=JSON.stringify(templates[k],null,2);
+    host.insertAdjacentHTML("beforeend",`
+      <div class="bulkInput">
+        <h4>${title} changes</h4>
+        <p>Provide only the JSON for this selected domain. Download a template if needed.</p>
+        <div class="inputRow">
+          <button class="btn small soft" onclick="downloadTemplate('${k}')">Download ${k}.json template</button>
+          <input type="file" accept=".json,application/json" style="font-size:9px">
+        </div>
+        <textarea class="jsonbox">${example}</textarea>
+      </div>`);
+  });
+  showBulkPanel("inputs");
+}
+function bulkBack(){showBulkPanel("select")}
+function bulkValidate(){showBulkPanel("preview")}
+function bulkBackToInputs(){showBulkPanel("inputs")}
+</script>
+</body>
+</html>

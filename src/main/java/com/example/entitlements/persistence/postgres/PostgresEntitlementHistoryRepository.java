@@ -67,6 +67,20 @@ public class PostgresEntitlementHistoryRepository implements EntitlementHistoryR
     }
 
     @Override
+    public List<EntitlementHistoryEvent> findByTenant(String tenantId) {
+        return jdbc.query(
+                """
+                SELECT id, tenant_id, resource_id, entitlement_key, target_type, target_id,
+                       change_type, previous_grant_id, new_grant_id, old_value, new_value, changed_at
+                FROM entitlement_history
+                WHERE tenant_id = :tenantId
+                ORDER BY changed_at, id
+                """,
+                new MapSqlParameterSource().addValue("tenantId", tenantId),
+                this::mapEvent);
+    }
+
+    @Override
     public void clear() {
         jdbc.getJdbcTemplate().execute("TRUNCATE TABLE entitlement_history");
     }

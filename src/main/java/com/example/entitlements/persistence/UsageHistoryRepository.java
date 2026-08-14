@@ -30,6 +30,10 @@ public interface UsageHistoryRepository {
 
     List<UsageBucket> findBucketsByResource(String tenantId, String resourceId);
 
+    List<UsageEvent> findEventsByTenant(String tenantId);
+
+    List<UsageBucket> findBucketsByTenant(String tenantId);
+
     boolean hasHistory(String tenantId, String resourceId);
 
     void clear();

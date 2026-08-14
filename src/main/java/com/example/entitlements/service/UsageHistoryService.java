@@ -38,6 +38,48 @@ public class UsageHistoryService {
             throw new NoSuchElementException("resource not found: " + resourceId);
         }
 
+        return buildHistory(resourceId, resource, events, buckets, from, until);
+    }
+
+    public TenantUsageHistory getTenantHistory(String tenantId, Instant from, Instant until) {
+        Tenant tenant = registry.getRequired(tenantId);
+        List<UsageEvent> events = store.findEventsByTenant(tenantId);
+        List<UsageBucket> buckets = store.findBucketsByTenant(tenantId);
+
+        Map<String, List<UsageEvent>> eventsByResource = new LinkedHashMap<>();
+        for (UsageEvent event : events) {
+            eventsByResource.computeIfAbsent(event.resourceId(), ignored -> new ArrayList<>()).add(event);
+        }
+        Map<String, List<UsageBucket>> bucketsByResource = new LinkedHashMap<>();
+        for (UsageBucket bucket : buckets) {
+            bucketsByResource.computeIfAbsent(bucket.resourceId(), ignored -> new ArrayList<>()).add(bucket);
+        }
+
+        LinkedHashMap<String, Boolean> resourceIds = new LinkedHashMap<>();
+        for (String resourceId : eventsByResource.keySet()) resourceIds.put(resourceId, true);
+        for (String resourceId : bucketsByResource.keySet()) resourceIds.put(resourceId, true);
+
+        List<ResourceUsageHistory> resources = new ArrayList<>();
+        for (String resourceId : resourceIds.keySet()) {
+            resources.add(buildHistory(
+                    resourceId,
+                    tenant.getResources().get(resourceId),
+                    eventsByResource.getOrDefault(resourceId, List.of()),
+                    bucketsByResource.getOrDefault(resourceId, List.of()),
+                    from,
+                    until));
+        }
+        return new TenantUsageHistory(resources);
+    }
+
+    private static ResourceUsageHistory buildHistory(
+            String resourceId,
+            Resource resource,
+            List<UsageEvent> events,
+            List<UsageBucket> buckets,
+            Instant from,
+            Instant until
+    ) {
         Map<String, Map<String, GrantAccumulator>> grouped = new LinkedHashMap<>();
         for (UsageEvent event : events) {
             if (!eventInRange(event.occurredAt(), from, until)) continue;

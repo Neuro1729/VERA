@@ -346,6 +346,14 @@ class ApiIntegrationTest {
                 .andExpect(status().isNotFound());
         mockMvc.perform(get("/api/tenants/missing/resources/api/usage-history"))
                 .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/tenants/acme/usage-history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resources[0].resourceId").value("api"))
+                .andExpect(jsonPath("$.resources[0].entitlements[0].entitlementKey").value("api.requests"));
+        mockMvc.perform(get("/api/tenants/acme/entitlement-history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changes").isArray());
     }
 
     private void consume(String subject, int amount) throws Exception {

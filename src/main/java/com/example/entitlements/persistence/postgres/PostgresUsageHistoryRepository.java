@@ -142,6 +142,37 @@ public class PostgresUsageHistoryRepository implements UsageHistoryRepository {
     }
 
     @Override
+    public List<UsageEvent> findEventsByTenant(String tenantId) {
+        return jdbc.query(
+                """
+                SELECT id, tenant_id, resource_id, resource_name_at_time, resource_kind_at_time,
+                       entitlement_key, grant_id, grant_target_type, grant_target_id,
+                       grant_target_name_at_time, subject_id, subject_name_at_time, used_value, occurred_at
+                FROM usage_events
+                WHERE tenant_id = :tenantId
+                ORDER BY occurred_at, id
+                """,
+                new MapSqlParameterSource().addValue("tenantId", tenantId),
+                this::mapEvent);
+    }
+
+    @Override
+    public List<UsageBucket> findBucketsByTenant(String tenantId) {
+        return jdbc.query(
+                """
+                SELECT tenant_id, subject_id, subject_name_at_time, resource_id, resource_name_at_time,
+                       resource_kind_at_time, entitlement_key, grant_id, grant_target_type, grant_target_id,
+                       grant_target_name_at_time, bucket_start, bucket_end, total_consumed, operation_count,
+                       first_occurred_at, last_occurred_at
+                FROM usage_buckets
+                WHERE tenant_id = :tenantId
+                ORDER BY bucket_start, resource_id, grant_id, subject_id
+                """,
+                new MapSqlParameterSource().addValue("tenantId", tenantId),
+                this::mapBucket);
+    }
+
+    @Override
     public boolean hasHistory(String tenantId, String resourceId) {
         Integer events = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM usage_events WHERE tenant_id = :tenantId AND resource_id = :resourceId",

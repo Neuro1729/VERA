@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class UsageHistoryStoreTest {
     private UsageHistoryStore store;
@@ -42,6 +43,9 @@ class UsageHistoryStoreTest {
         assertEquals(1, store.findBucketsByResource("acme", "gpu").size());
         assertEquals(1, store.findBucketsByResource("globex", "api").size());
         assertEquals(0, new BigDecimal("1").compareTo(store.findBucketsByResource("acme", "api").getFirst().totalConsumed()));
+        assertEquals(2, store.findBucketsByTenant("acme").size());
+        assertEquals(1, store.findBucketsByTenant("globex").size());
+        assertTrue(store.findEventsByTenant("acme").isEmpty());
     }
 
     @Test

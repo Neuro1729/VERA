@@ -68,6 +68,32 @@ Optional URL override: `SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/e
 
 Server: `http://localhost:8080`
 
+### Admin UI (Vite)
+
+Local development keeps the React app and Spring Boot on separate ports. Vite proxies `/api` to Spring Boot so the browser stays same-origin and sends the HttpOnly `JSESSIONID` cookie.
+
+```bash
+# terminal 1
+mvn spring-boot:run
+
+# terminal 2
+cd frontend
+npm install
+npm run dev
+```
+
+UI: `http://localhost:5173`  
+API proxy: `/api/*` → `http://localhost:8080`
+
+Production frontend artifact:
+
+```bash
+cd frontend
+npm run build
+```
+
+Output is `frontend/dist`. Backend unit tests do not require Node. Serve `frontend/dist` with any static host, or put a reverse proxy in front of both `/` (SPA) and `/api` (Spring Boot).
+
 First start against an empty `entitlements` database applies Flyway migrations automatically.
 
 ### Smoke the API
@@ -149,6 +175,8 @@ GET  /api/tenants/{tenantId}/resources/{resourceId}/distribution?scopeId=
 GET  /api/tenants/{tenantId}/resources/{resourceId}/live
 GET  /api/tenants/{tenantId}/resources/{resourceId}/entitlement-history
 GET  /api/tenants/{tenantId}/resources/{resourceId}/usage-history
+GET  /api/tenants/{tenantId}/entitlement-history
+GET  /api/tenants/{tenantId}/usage-history
 ```
 
 When `vera.security.enabled=true` (the default), `POST /api/company-registration` and `POST /api/tenants/register` are not anonymous creation paths. Use `POST /api/auth/signup`. Preview stays public. Existing tests/dev fixtures can set `vera.security.enabled=false` to keep the older unauthenticated apply endpoints.
@@ -161,10 +189,12 @@ Two actors, no JWT/SSO.
 
 | Actor | Credential | Transport | Access |
 | --- | --- | --- | --- |
-| One human admin per tenant | email + password | server-side `HttpSession`, `JSESSIONID` cookie | management APIs |
+| One human admin per tenant | email + password | server-side `HttpSession`, `JSESSIONID` cookie | management APIs + VERA UI |
 | One company backend per tenant | VERA API key | `X-VERA-API-KEY` header | `/api/gateway/**` only |
 
 The server stores the authenticated session. The browser/client keeps only `JSESSIONID` (HttpOnly, SameSite=Lax, 30 minute timeout). Set `VERA_SESSION_COOKIE_SECURE=true` in HTTPS production; leave it unset/false for localhost.
+
+The React admin UI never stores `JSESSIONID`, passwords, or the runtime API key in `localStorage` / `sessionStorage`. Authentication state comes from `GET /api/auth/me`. The frontend never calls the runtime gateway with the company API key.
 
 Raw API keys are returned **once** at signup and on rotate. The database stores `publicId` + `secretHash` only. An API key is bound to exactly one tenant. Path/body `tenantId` is never trusted as authentication.
 
@@ -198,43 +228,6 @@ curl -sS -X POST http://localhost:8080/api/gateway/tenants/acme/evaluate \
 Postman/curl must send both the `XSRF-TOKEN` cookie and `X-XSRF-TOKEN` header for management mutations. Gateway calls must not use the admin session; admin calls must not use the API key.
 
 JWT, OAuth, OIDC, SAML, refresh tokens, and multiple admins per tenant are intentionally deferred.
-
-## Company onboarding
-
-```text
-POST /api/company-registration/preview
-POST /api/company-registration
-POST /api/tenants/register               # legacy flat body
-
-GET  /api/tenants
-GET  /api/tenants/{tenantId}
-GET  /api/tenants/{tenantId}/usage
-
-POST /api/commands                       # small edits
-
-POST /api/tenants/{tenantId}/sync/preview
-POST /api/tenants/{tenantId}/sync
-POST /api/tenants/{tenantId}/sync/organization[/preview]
-POST /api/tenants/{tenantId}/sync/resources[/preview]
-POST /api/tenants/{tenantId}/sync/grants[/preview]
-
-POST /api/gateway/tenants/{tenantId}/evaluate
-POST /api/gateway/tenants/{tenantId}/consume
-POST /api/gateway/tenants/{tenantId}/rate-limit/consume
-POST /api/gateway/tenants/{tenantId}/use
-
-POST /api/entitlements/evaluate          # same runtime, tenantId in body
-POST /api/entitlements/consume
-POST /api/entitlements/rate-limit/consume
-POST /api/entitlements/use
-
-GET  /api/tenants/{tenantId}/resources/{resourceId}/distribution?scopeId=
-GET  /api/tenants/{tenantId}/resources/{resourceId}/live
-GET  /api/tenants/{tenantId}/resources/{resourceId}/entitlement-history
-GET  /api/tenants/{tenantId}/resources/{resourceId}/usage-history
-```
-
-Sample JSON lives in `examples/`. Domain and resolution rules: `architecture-decisions.md`.
 
 ## Company onboarding
 

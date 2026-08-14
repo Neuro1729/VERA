@@ -105,5 +105,9 @@ class TenantIsolationApiTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/tenants/globex/usage").session(acmeSession))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/tenants/globex/entitlement-history").session(acmeSession))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/tenants/globex/usage-history").session(acmeSession))
+                .andExpect(status().isForbidden());
     }
 }

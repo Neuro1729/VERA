@@ -130,6 +130,30 @@ public class UsageHistoryStore implements UsageHistoryRepository {
         return List.copyOf(found);
     }
 
+    public List<UsageEvent> findEventsByTenant(String tenantId) {
+        List<UsageEvent> all = new ArrayList<>();
+        for (var entry : eventsByResource.entrySet()) {
+            if (!entry.getKey().tenantId().equals(tenantId)) continue;
+            List<UsageEvent> events = entry.getValue();
+            synchronized (events) {
+                all.addAll(events);
+            }
+        }
+        return List.copyOf(all);
+    }
+
+    public List<UsageBucket> findBucketsByTenant(String tenantId) {
+        List<UsageBucket> found = new ArrayList<>();
+        for (var entry : bucketKeysByResource.entrySet()) {
+            if (!entry.getKey().tenantId().equals(tenantId)) continue;
+            for (UsageBucketKey key : entry.getValue()) {
+                UsageBucket bucket = buckets.get(key);
+                if (bucket != null) found.add(bucket);
+            }
+        }
+        return List.copyOf(found);
+    }
+
     public boolean hasHistory(String tenantId, String resourceId) {
         ResourceHistoryKey key = new ResourceHistoryKey(tenantId, resourceId);
         List<UsageEvent> events = eventsByResource.get(key);

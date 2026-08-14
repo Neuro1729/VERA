@@ -383,6 +383,21 @@ class UsageHistoryServiceTest {
         assertTrue(historyStore.findEventsByResource("acme", "api").isEmpty());
     }
 
+    @Test
+    void tenantHistoryIncludesEveryResourceWithUsage() {
+        usageService.consume(new ConsumptionRequest("acme", "alice", "api", "api.requests", new BigDecimal("8")));
+        resourceUseService.commitUse(new EvaluationRequest("acme", "alice", "api", "api.models", mapper.valueToTree("large")));
+
+        TenantUsageHistory history = historyService.getTenantHistory("acme", null, null);
+        assertEquals(1, history.resources().size());
+        assertEquals("api", history.resources().getFirst().resourceId());
+        assertTrue(history.resources().getFirst().entitlements().stream()
+                .anyMatch(entitlement -> "api.requests".equals(entitlement.entitlementKey())));
+        assertTrue(history.resources().getFirst().entitlements().stream()
+                .anyMatch(entitlement -> "api.models".equals(entitlement.entitlementKey())));
+        assertThrows(NoSuchElementException.class, () -> historyService.getTenantHistory("missing", null, null));
+    }
+
     private UsageBucket onlyBucket(String resourceId) {
         List<UsageBucket> buckets = historyStore.findBucketsByResource("acme", resourceId);
         assertEquals(1, buckets.size());

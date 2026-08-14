@@ -181,6 +181,9 @@ class PostgresPersistenceIT extends PostgresIntegrationTest {
         assertTrue(reloaded.getGrants().values().stream().noneMatch(grant -> grant.resourceId().equals("api")));
         assertTrue(usageHistoryRepository.hasHistory("acme", "api"));
         assertFalse(entitlementHistoryRepository.findByResource("acme", "api").isEmpty());
+        assertFalse(entitlementHistoryRepository.findByTenant("acme").isEmpty());
+        assertTrue(entitlementHistoryRepository.findByTenant("acme").stream()
+                .allMatch(event -> "acme".equals(event.tenantId())));
     }
 
     @Test

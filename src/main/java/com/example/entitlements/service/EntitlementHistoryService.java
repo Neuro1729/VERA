@@ -57,6 +57,11 @@ public class EntitlementHistoryService {
         }
     }
 
+    public TenantEntitlementHistory getTenantHistory(String tenantId) {
+        registry.getRequired(tenantId);
+        return new TenantEntitlementHistory(store.findByTenant(tenantId));
+    }
+
     void recordCreated(String tenantId, EntitlementGrant grant) {
         store.append(event(
                 tenantId,

@@ -3,6 +3,7 @@ package com.example.entitlements.api;
 import com.example.entitlements.service.EntitlementHistoryService;
 import com.example.entitlements.service.ResourceEntitlementHistory;
 import com.example.entitlements.service.TenantAccessService;
+import com.example.entitlements.service.TenantEntitlementHistory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,6 +21,12 @@ public class EntitlementHistoryController {
     ) {
         this.historyService = historyService;
         this.tenantAccessService = tenantAccessService;
+    }
+
+    @GetMapping("/{tenantId}/entitlement-history")
+    public TenantEntitlementHistory tenantHistory(@PathVariable String tenantId) {
+        tenantAccessService.requireAdminTenant(tenantId);
+        return historyService.getTenantHistory(tenantId);
     }
 
     @GetMapping("/{tenantId}/resources/{resourceId}/entitlement-history")

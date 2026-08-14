@@ -58,6 +58,18 @@ class EntitlementHistoryStoreTest {
     }
 
     @Test
+    void findByTenantReturnsAllResourcesAndIsolatesTenants() {
+        store.append(event("acme", "gpu", "gpu.hours", "gpu-1"));
+        store.append(event("acme", "api", "api.requests", "api-1"));
+        store.append(event("globex", "gpu", "gpu.hours", "globex-1"));
+
+        List<String> acmeIds = store.findByTenant("acme").stream().map(EntitlementHistoryEvent::id).toList();
+        assertEquals(List.of("api-1", "gpu-1"), acmeIds);
+        assertEquals(List.of("globex-1"), store.findByTenant("globex").stream().map(EntitlementHistoryEvent::id).toList());
+        assertTrue(store.findByTenant("missing").isEmpty());
+    }
+
+    @Test
     void clearRemovesAllHistory() {
         store.append(event("acme", "gpu", "gpu.hours", "e1"));
         store.clear();

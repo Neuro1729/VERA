@@ -9,5 +9,7 @@ public interface EntitlementHistoryRepository {
 
     List<EntitlementHistoryEvent> findByResource(String tenantId, String resourceId);
 
+    List<EntitlementHistoryEvent> findByTenant(String tenantId);
+
     void clear();
 }

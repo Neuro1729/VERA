@@ -416,6 +416,21 @@ class EntitlementHistoryServiceTest {
     void missingTenantAndResourceThrowNotFound() {
         assertThrows(NoSuchElementException.class, () -> historyService.getHistory("missing", "gpu"));
         assertThrows(NoSuchElementException.class, () -> historyService.getHistory("acme", "missing"));
+        assertThrows(NoSuchElementException.class, () -> historyService.getTenantHistory("missing"));
+    }
+
+    @Test
+    void tenantHistoryReturnsEventsAcrossResourcesAndKeepsDeletedResourceEvents() throws Exception {
+        execute("SET_ENTITLEMENT", """
+                {"grantId":"g-eng-hours","target":{"type":"SCOPE","id":"engineering"},"resourceId":"gpu","entitlementKey":"gpu.hours","value":{"type":"QUOTA","limit":5000,"unit":"hour","period":"MONTHLY"}}
+                """);
+        execute("REMOVE_RESOURCE", "{\"resourceId\":\"gpu\"}");
+
+        TenantEntitlementHistory history = historyService.getTenantHistory("acme");
+        assertTrue(history.changes().stream().anyMatch(event -> "api".equals(event.resourceId())));
+        assertTrue(history.changes().stream().anyMatch(event ->
+                "gpu".equals(event.resourceId()) && event.changeType() == EntitlementChangeType.REMOVED));
+        assertTrue(history.changes().stream().allMatch(event -> "acme".equals(event.tenantId())));
     }
 
     @Test

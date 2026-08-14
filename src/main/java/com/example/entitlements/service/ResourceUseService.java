@@ -12,8 +12,8 @@ import com.example.entitlements.domain.TextValue;
 import com.example.entitlements.domain.UsageEvent;
 import com.example.entitlements.request.EvaluationRequest;
 import com.example.entitlements.request.EvaluationResult;
+import com.example.entitlements.persistence.UsageHistoryRepository;
 import com.example.entitlements.store.TenantRegistry;
-import com.example.entitlements.store.UsageHistoryStore;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -32,14 +33,14 @@ import java.util.UUID;
 public class ResourceUseService {
     private final TenantRegistry registry;
     private final EntitlementService entitlementService;
-    private final UsageHistoryStore historyStore;
+    private final UsageHistoryRepository historyStore;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public ResourceUseService(
             TenantRegistry registry,
             EntitlementService entitlementService,
-            UsageHistoryStore historyStore,
+            UsageHistoryRepository historyStore,
             ObjectMapper objectMapper,
             Clock clock
     ) {
@@ -50,6 +51,7 @@ public class ResourceUseService {
         this.clock = clock;
     }
 
+    @Transactional
     public EvaluationResult commitUse(EvaluationRequest request) {
         Tenant tenant = registry.getRequired(request.tenantId());
         Resource resource = tenant.getResources().get(request.resourceId());

@@ -6,8 +6,8 @@ import com.example.entitlements.domain.Target;
 import com.example.entitlements.domain.Tenant;
 import com.example.entitlements.domain.UsageBucket;
 import com.example.entitlements.domain.UsageEvent;
+import com.example.entitlements.persistence.UsageHistoryRepository;
 import com.example.entitlements.store.TenantRegistry;
-import com.example.entitlements.store.UsageHistoryStore;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -21,9 +21,9 @@ import java.util.NoSuchElementException;
 @Service
 public class UsageHistoryService {
     private final TenantRegistry registry;
-    private final UsageHistoryStore store;
+    private final UsageHistoryRepository store;
 
-    public UsageHistoryService(TenantRegistry registry, UsageHistoryStore store) {
+    public UsageHistoryService(TenantRegistry registry, UsageHistoryRepository store) {
         this.registry = registry;
         this.store = store;
     }

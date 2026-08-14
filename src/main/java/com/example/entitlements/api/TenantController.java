@@ -3,9 +3,9 @@ package com.example.entitlements.api;
 import com.example.entitlements.domain.Tenant;
 import com.example.entitlements.domain.Usage;
 import com.example.entitlements.request.RegistrationRequest;
+import com.example.entitlements.persistence.UsageRepository;
 import com.example.entitlements.service.RegistrationService;
 import com.example.entitlements.store.TenantRegistry;
-import com.example.entitlements.store.UsageStore;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,9 +16,9 @@ import java.util.Collection;
 public class TenantController {
     private final RegistrationService registrationService;
     private final TenantRegistry registry;
-    private final UsageStore usageStore;
+    private final UsageRepository usageStore;
 
-    public TenantController(RegistrationService registrationService, TenantRegistry registry, UsageStore usageStore) {
+    public TenantController(RegistrationService registrationService, TenantRegistry registry, UsageRepository usageStore) {
         this.registrationService = registrationService;
         this.registry = registry;
         this.usageStore = usageStore;
@@ -43,8 +43,6 @@ public class TenantController {
     @GetMapping("/{tenantId}/usage")
     public Collection<Usage> usage(@PathVariable String tenantId) {
         registry.getRequired(tenantId);
-        return usageStore.all().stream()
-                .filter(usage -> registry.getRequired(tenantId).getGrants().containsKey(usage.getGrantId()))
-                .toList();
+        return usageStore.findAllByTenant(tenantId);
     }
 }

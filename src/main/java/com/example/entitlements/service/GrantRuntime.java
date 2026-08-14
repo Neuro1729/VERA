@@ -1,7 +1,7 @@
 package com.example.entitlements.service;
 
 import com.example.entitlements.domain.*;
-import com.example.entitlements.store.UsageStore;
+import com.example.entitlements.persistence.UsageRepository;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -9,11 +9,11 @@ import java.time.Duration;
 import java.time.Instant;
 
 final class GrantRuntime {
-    private final UsageStore usageStore;
+    private final UsageRepository usageStore;
     private final RateLimitService rateLimitService;
     private final Clock clock;
 
-    GrantRuntime(UsageStore usageStore, RateLimitService rateLimitService, Clock clock) {
+    GrantRuntime(UsageRepository usageStore, RateLimitService rateLimitService, Clock clock) {
         this.usageStore = usageStore;
         this.rateLimitService = rateLimitService;
         this.clock = clock;
@@ -22,7 +22,7 @@ final class GrantRuntime {
     ResourceDistributionResult.RuntimeState of(String tenantId, EntitlementGrant grant) {
         Instant now = Instant.now(clock);
         return switch (grant.value()) {
-            case QuotaValue quota -> quotaRuntime(grant.id(), quota, now);
+            case QuotaValue quota -> quotaRuntime(tenantId, grant.id(), quota, now);
             case BooleanValue booleanValue -> new ResourceDistributionResult.BooleanRuntime(booleanValue.value());
             case QuantityValue quantity -> new ResourceDistributionResult.QuantityRuntime(quantity.value(), quantity.unit());
             case RangeValue range -> new ResourceDistributionResult.RangeRuntime(range.min(), range.max(), range.unit());
@@ -46,9 +46,10 @@ final class GrantRuntime {
         };
     }
 
-    private ResourceDistributionResult.QuotaRuntime quotaRuntime(String grantId, QuotaValue quota, Instant now) {
+    private ResourceDistributionResult.QuotaRuntime quotaRuntime(
+            String tenantId, String grantId, QuotaValue quota, Instant now) {
         QuotaWindow window = QuotaWindow.forInstant(now, quota.period());
-        Usage usage = usageStore.get(grantId);
+        Usage usage = usageStore.get(tenantId, grantId);
         BigDecimal consumed;
         Instant periodStart;
         Instant periodEnd;

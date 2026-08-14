@@ -3,7 +3,7 @@ package com.example.entitlements.store;
 import com.example.entitlements.domain.Target;
 import com.example.entitlements.domain.UsageBucket;
 import com.example.entitlements.domain.UsageEvent;
-import org.springframework.stereotype.Component;
+import com.example.entitlements.persistence.UsageHistoryRepository;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -16,8 +16,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-@Component
-public class UsageHistoryStore {
+public class UsageHistoryStore implements UsageHistoryRepository {
     private static final Duration BUCKET_SIZE = Duration.ofMinutes(5);
 
     private record ResourceHistoryKey(String tenantId, String resourceId) {}

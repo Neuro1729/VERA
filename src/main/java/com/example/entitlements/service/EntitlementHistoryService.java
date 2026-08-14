@@ -7,7 +7,7 @@ import com.example.entitlements.domain.EntitlementHistoryEvent;
 import com.example.entitlements.domain.EntitlementValue;
 import com.example.entitlements.domain.Resource;
 import com.example.entitlements.domain.Tenant;
-import com.example.entitlements.store.EntitlementHistoryStore;
+import com.example.entitlements.persistence.EntitlementHistoryRepository;
 import com.example.entitlements.store.TenantRegistry;
 import org.springframework.stereotype.Service;
 
@@ -23,10 +23,10 @@ import java.util.UUID;
 @Service
 public class EntitlementHistoryService {
     private final TenantRegistry registry;
-    private final EntitlementHistoryStore store;
+    private final EntitlementHistoryRepository store;
     private final Clock clock;
 
-    public EntitlementHistoryService(TenantRegistry registry, EntitlementHistoryStore store, Clock clock) {
+    public EntitlementHistoryService(TenantRegistry registry, EntitlementHistoryRepository store, Clock clock) {
         this.registry = registry;
         this.store = store;
         this.clock = clock;

@@ -1,30 +1,47 @@
 package com.example.entitlements.service;
 
 import com.example.entitlements.domain.*;
+import com.example.entitlements.persistence.TenantRepository;
+import com.example.entitlements.persistence.memory.InMemoryTenantRepository;
 import com.example.entitlements.request.*;
+import com.example.entitlements.store.CacheEvictOnRollback;
 import com.example.entitlements.store.TenantRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class RegistrationService {
     private final TenantRegistry registry;
     private final EntitlementHistoryService historyService;
+    private final TenantRepository tenantRepository;
 
     public RegistrationService(TenantRegistry registry, EntitlementHistoryService historyService) {
-        this.registry = registry;
-        this.historyService = historyService;
+        this(registry, historyService, new InMemoryTenantRepository());
     }
 
+    @Autowired
+    public RegistrationService(
+            TenantRegistry registry,
+            EntitlementHistoryService historyService,
+            TenantRepository tenantRepository
+    ) {
+        this.registry = registry;
+        this.historyService = historyService;
+        this.tenantRepository = tenantRepository;
+    }
+
+    @Transactional
     public Tenant register(RegistrationRequest request) {
         if (request == null || request.tenant() == null) throw new IllegalArgumentException("tenant is required");
         if (request.structure() == null) throw new IllegalArgumentException("root structure is required");
 
         Tenant tenant = new Tenant(request.tenant().id(), request.tenant().name());
+        CacheEvictOnRollback.register(registry, tenant.getId());
         buildScopeTree(tenant, request.structure(), null);
         tenant.setRootScopeId(request.structure().id());
 
@@ -50,6 +67,7 @@ public class RegistrationService {
             created.add(grant);
         }
 
+        tenantRepository.insert(tenant);
         registry.register(tenant);
         for (EntitlementGrant grant : created) {
             historyService.recordCreated(tenant.getId(), grant);

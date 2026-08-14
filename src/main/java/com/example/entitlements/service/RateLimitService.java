@@ -1,11 +1,15 @@
 package com.example.entitlements.service;
 
 import com.example.entitlements.domain.*;
+import com.example.entitlements.persistence.RateLimitStateRepository;
+import com.example.entitlements.persistence.UsageHistoryRepository;
+import com.example.entitlements.persistence.memory.InMemoryRateLimitStateRepository;
 import com.example.entitlements.request.RateLimitRequest;
 import com.example.entitlements.request.RateLimitResult;
 import com.example.entitlements.store.TenantRegistry;
-import com.example.entitlements.store.UsageHistoryStore;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -14,8 +18,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 @Service
 public class RateLimitService {
@@ -23,22 +25,35 @@ public class RateLimitService {
 
     private final TenantRegistry tenantRegistry;
     private final EntitlementResolver entitlementResolver;
-    private final UsageHistoryStore historyStore;
+    private final UsageHistoryRepository historyStore;
     private final Clock clock;
-    private final ConcurrentMap<String, RateLimitState> buckets = new ConcurrentHashMap<>();
+    private final RateLimitStateRepository buckets;
 
     public RateLimitService(
             TenantRegistry tenantRegistry,
             EntitlementResolver entitlementResolver,
-            UsageHistoryStore historyStore,
+            UsageHistoryRepository historyStore,
             Clock clock
+    ) {
+        this(tenantRegistry, entitlementResolver, historyStore, clock, new InMemoryRateLimitStateRepository());
+    }
+
+    @Autowired
+    public RateLimitService(
+            TenantRegistry tenantRegistry,
+            EntitlementResolver entitlementResolver,
+            UsageHistoryRepository historyStore,
+            Clock clock,
+            RateLimitStateRepository buckets
     ) {
         this.tenantRegistry = tenantRegistry;
         this.entitlementResolver = entitlementResolver;
         this.historyStore = historyStore;
         this.clock = clock;
+        this.buckets = buckets;
     }
 
+    @Transactional
     public RateLimitResult tryConsume(RateLimitRequest request) {
         Objects.requireNonNull(request, "request is required");
         if (request.tokens() == null || request.tokens().signum() <= 0) {
@@ -58,32 +73,32 @@ public class RateLimitService {
             throw new IllegalArgumentException("only RATE_LIMIT entitlements support token bucket consume");
         }
 
-        String key = bucketKey(tenant.getId(), resolved.grant().id());
         Instant now = Instant.now(clock);
-        RateLimitState state = buckets.computeIfAbsent(
-                key, ignored -> new RateLimitState(config.capacity(), now));
+        buckets.insertIfAbsent(tenant.getId(), resolved.grant().id(), new RateLimitState(config.capacity(), now));
+        RateLimitState state = buckets.lock(tenant.getId(), resolved.grant().id());
+        if (state == null) {
+            state = new RateLimitState(config.capacity(), now);
+        }
 
-        RateLimitResult result;
-        synchronized (state) {
-            refill(state, config, Instant.now(clock));
-            if (state.getAvailableTokens().compareTo(request.tokens()) < 0) {
-                return new RateLimitResult(
-                        false,
-                        "rate limit exceeded",
-                        resolved.grant().id(),
-                        resolved.source(),
-                        request.tokens(),
-                        state.getAvailableTokens());
-            }
-            state.setAvailableTokens(state.getAvailableTokens().subtract(request.tokens()));
-            result = new RateLimitResult(
-                    true,
-                    "consumed",
+        refill(state, config, Instant.now(clock));
+        if (state.getAvailableTokens().compareTo(request.tokens()) < 0) {
+            return new RateLimitResult(
+                    false,
+                    "rate limit exceeded",
                     resolved.grant().id(),
                     resolved.source(),
                     request.tokens(),
                     state.getAvailableTokens());
         }
+        state.setAvailableTokens(state.getAvailableTokens().subtract(request.tokens()));
+        buckets.save(tenant.getId(), resolved.grant().id(), state);
+        RateLimitResult result = new RateLimitResult(
+                true,
+                "consumed",
+                resolved.grant().id(),
+                resolved.source(),
+                request.tokens(),
+                state.getAvailableTokens());
 
         Resource resource = tenant.getResources().get(request.resourceId());
         historyStore.addToBucket(
@@ -114,41 +129,33 @@ public class RateLimitService {
         if (!(resolved.grant().value() instanceof RateLimitValue config)) {
             throw new IllegalArgumentException("only RATE_LIMIT entitlements support token availability");
         }
-        String key = bucketKey(tenant.getId(), resolved.grant().id());
-        Instant now = Instant.now(clock);
-        RateLimitState state = buckets.computeIfAbsent(
-                key, ignored -> new RateLimitState(config.capacity(), now));
-        synchronized (state) {
-            refill(state, config, Instant.now(clock));
-            return state.getAvailableTokens();
-        }
+        return peekAvailableTokens(tenant.getId(), resolved.grant().id(), config);
     }
 
     public void removeBucket(String tenantId, String grantId) {
         if (tenantId == null || tenantId.isBlank() || grantId == null || grantId.isBlank()) {
             return;
         }
-        buckets.remove(bucketKey(tenantId, grantId));
+        buckets.remove(tenantId, grantId);
     }
 
     /**
      * Read-only view of current available tokens for distribution.
      * Does not create a bucket when none exists (reports full capacity).
-     * If a bucket exists, refills it to reflect current time before reading.
+     * Computes refill against a copy so evaluate/live queries do not persist state.
      */
     public BigDecimal peekAvailableTokens(String tenantId, String grantId, RateLimitValue config) {
         Objects.requireNonNull(config, "rate limit config is required");
         if (tenantId == null || tenantId.isBlank() || grantId == null || grantId.isBlank()) {
             return config.capacity();
         }
-        RateLimitState state = buckets.get(bucketKey(tenantId, grantId));
-        if (state == null) {
+        RateLimitState stored = buckets.get(tenantId, grantId);
+        if (stored == null) {
             return config.capacity();
         }
-        synchronized (state) {
-            refill(state, config, Instant.now(clock));
-            return state.getAvailableTokens();
-        }
+        RateLimitState state = new RateLimitState(stored.getAvailableTokens(), stored.getLastRefillTime());
+        refill(state, config, Instant.now(clock));
+        return state.getAvailableTokens();
     }
 
     public void clear() {
@@ -157,12 +164,12 @@ public class RateLimitService {
 
     /** Visible for tests. */
     public boolean hasBucket(String tenantId, String grantId) {
-        return buckets.containsKey(bucketKey(tenantId, grantId));
+        return buckets.exists(tenantId, grantId);
     }
 
     /** Visible for tests. */
     public int bucketCount() {
-        return buckets.size();
+        return buckets.count();
     }
 
     private void refill(RateLimitState state, RateLimitValue config, Instant now) {
@@ -188,9 +195,5 @@ public class RateLimitService {
         }
         state.setAvailableTokens(refilled);
         state.setLastRefillTime(now);
-    }
-
-    private String bucketKey(String tenantId, String grantId) {
-        return tenantId + ":" + grantId;
     }
 }

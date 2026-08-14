@@ -6,31 +6,52 @@ import com.example.entitlements.domain.*;
 import com.example.entitlements.request.CommandRequest;
 import com.example.entitlements.request.CommandResult;
 import com.example.entitlements.request.command.CommandPayloads.*;
+import com.example.entitlements.persistence.TenantRepository;
+import com.example.entitlements.persistence.UsageRepository;
+import com.example.entitlements.persistence.memory.InMemoryTenantRepository;
+import com.example.entitlements.store.CacheEvictOnRollback;
 import com.example.entitlements.store.TenantRegistry;
-import com.example.entitlements.store.UsageStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
 @Service
 public class CommandService {
     private final TenantRegistry registry;
-    private final UsageStore usageStore;
+    private final UsageRepository usageStore;
     private final ObjectMapper objectMapper;
     private final GrantResolutionCache cache;
     private final ResolutionCacheInvalidator invalidator;
     private final RateLimitService rateLimitService;
     private final EntitlementHistoryService historyService;
+    private final TenantRepository tenantRepository;
 
     public CommandService(
             TenantRegistry registry,
-            UsageStore usageStore,
+            UsageRepository usageStore,
             ObjectMapper objectMapper,
             GrantResolutionCache cache,
             ResolutionCacheInvalidator invalidator,
             RateLimitService rateLimitService,
             EntitlementHistoryService historyService
+    ) {
+        this(registry, usageStore, objectMapper, cache, invalidator, rateLimitService, historyService,
+                new InMemoryTenantRepository());
+    }
+
+    @Autowired
+    public CommandService(
+            TenantRegistry registry,
+            UsageRepository usageStore,
+            ObjectMapper objectMapper,
+            GrantResolutionCache cache,
+            ResolutionCacheInvalidator invalidator,
+            RateLimitService rateLimitService,
+            EntitlementHistoryService historyService,
+            TenantRepository tenantRepository
     ) {
         this.registry = registry;
         this.usageStore = usageStore;
@@ -39,11 +60,14 @@ public class CommandService {
         this.invalidator = invalidator;
         this.rateLimitService = rateLimitService;
         this.historyService = historyService;
+        this.tenantRepository = tenantRepository;
     }
 
+    @Transactional
     public CommandResult execute(CommandRequest request) {
         if (request == null || request.type() == null) throw new IllegalArgumentException("command type is required");
         Tenant tenant = registry.getRequired(request.tenantId());
+        CacheEvictOnRollback.register(registry, tenant.getId());
         synchronized (tenant) {
             return switch (request.type()) {
                 case ADD_SCOPE -> addScope(tenant, convert(request, AddScope.class));
@@ -75,6 +99,7 @@ public class CommandService {
         Scope scope = new Scope(data.id(), data.kind(), data.name(), data.metadata(), parent.getId());
         tenant.getScopes().put(scope.getId(), scope);
         parent.addChild(scope.getId());
+        tenantRepository.insertScope(tenant.getId(), scope);
         return ok("scope added: " + scope.getId());
     }
 
@@ -83,6 +108,7 @@ public class CommandService {
         scope.setKind(payload.kind());
         scope.setName(payload.name());
         scope.mergeMetadata(payload.metadata());
+        tenantRepository.updateScope(tenant.getId(), scope);
         return ok("scope updated: " + scope.getId());
     }
 
@@ -110,6 +136,8 @@ public class CommandService {
 
         subjectIds.forEach(tenant.getSubjects()::remove);
         scopeIds.forEach(tenant.getScopes()::remove);
+        tenantRepository.deleteSubjects(tenant.getId(), subjectIds);
+        tenantRepository.deleteScopes(tenant.getId(), scopeIds);
         return ok("scope subtree removed: " + payload.scopeId());
     }
 
@@ -124,6 +152,7 @@ public class CommandService {
         oldParent.removeChild(scope.getId());
         newParent.addChild(scope.getId());
         scope.setParentScopeId(newParent.getId());
+        tenantRepository.updateScopeParent(tenant.getId(), scope.getId(), newParent.getId());
         invalidator.invalidateScopeSubtree(tenant, scope.getId());
         return ok("scope moved: " + scope.getId());
     }
@@ -135,6 +164,7 @@ public class CommandService {
         Subject subject = new Subject(input.id(), input.kind(), input.name(), input.metadata(), scope.getId());
         tenant.getSubjects().put(subject.getId(), subject);
         scope.addSubject(subject.getId());
+        tenantRepository.insertSubject(tenant.getId(), subject);
         return ok("subject added: " + subject.getId());
     }
 
@@ -143,6 +173,7 @@ public class CommandService {
         subject.setKind(payload.kind());
         subject.setName(payload.name());
         subject.mergeMetadata(payload.metadata());
+        tenantRepository.updateSubject(tenant.getId(), subject);
         return ok("subject updated: " + subject.getId());
     }
 
@@ -156,6 +187,7 @@ public class CommandService {
                 .map(EntitlementGrant::id)
                 .toList();
         removedGrantIds.forEach(grantId -> purgeGrant(tenant, grantId));
+        tenantRepository.deleteSubjects(tenant.getId(), List.of(subject.getId()));
         return ok("subject removed: " + subject.getId());
     }
 
@@ -166,6 +198,7 @@ public class CommandService {
         oldScope.removeSubject(subject.getId());
         newScope.addSubject(subject.getId());
         subject.setScopeId(newScope.getId());
+        tenantRepository.updateSubjectScope(tenant.getId(), subject.getId(), newScope.getId());
         cache.invalidateSubject(tenant.getId(), subject.getId());
         return ok("subject moved: " + subject.getId());
     }
@@ -176,6 +209,7 @@ public class CommandService {
         if (tenant.getResources().putIfAbsent(resource.id(), resource) != null) {
             throw new IllegalArgumentException("resource already exists: " + resource.id());
         }
+        tenantRepository.insertResource(tenant.getId(), resource);
         return ok("resource added: " + resource.id());
     }
 
@@ -207,6 +241,7 @@ public class CommandService {
             }
         }
         tenant.getResources().put(updated.id(), updated);
+        tenantRepository.updateResource(tenant.getId(), updated);
         if (definitionsChanged) {
             cache.invalidateResource(tenant.getId(), updated.id());
         }
@@ -222,6 +257,7 @@ public class CommandService {
                 .map(EntitlementGrant::id)
                 .toList();
         removedGrantIds.forEach(grantId -> purgeGrant(tenant, grantId));
+        tenantRepository.deleteResource(tenant.getId(), payload.resourceId());
         return ok("resource removed: " + payload.resourceId());
     }
 
@@ -239,8 +275,11 @@ public class CommandService {
             boolean sameId = existing.id().equals(grant.id());
             boolean material = isMaterialRuntimeChange(existing.value(), grant.value());
             tenant.removeGrant(existing.id());
+            if (!sameId) {
+                tenantRepository.deleteGrant(tenant.getId(), existing.id());
+            }
             if (!sameId || material) {
-                usageStore.remove(existing.id());
+                usageStore.remove(tenant.getId(), existing.id());
                 rateLimitService.removeBucket(tenant.getId(), existing.id());
             } else {
                 preservedRuntime = true;
@@ -251,6 +290,7 @@ public class CommandService {
             throw new IllegalArgumentException("grant id already exists: " + id);
         }
         tenant.putGrant(grant);
+        tenantRepository.upsertGrant(tenant.getId(), grant);
         if (grant.value() instanceof RateLimitValue && !preservedRuntime) {
             rateLimitService.removeBucket(tenant.getId(), grant.id());
         }
@@ -275,8 +315,9 @@ public class CommandService {
 
     private void purgeGrant(Tenant tenant, String grantId) {
         Optional<EntitlementGrant> removed = tenant.removeGrant(grantId);
-        usageStore.remove(grantId);
+        usageStore.remove(tenant.getId(), grantId);
         rateLimitService.removeBucket(tenant.getId(), grantId);
+        tenantRepository.deleteGrant(tenant.getId(), grantId);
         removed.ifPresent(grant -> historyService.recordRemoved(tenant.getId(), grant));
     }
 

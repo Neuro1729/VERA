@@ -1,12 +1,13 @@
 package com.example.entitlements.service;
 
 import com.example.entitlements.domain.*;
+import com.example.entitlements.persistence.UsageHistoryRepository;
+import com.example.entitlements.persistence.UsageRepository;
 import com.example.entitlements.request.ConsumptionRequest;
 import com.example.entitlements.request.ConsumptionResult;
 import com.example.entitlements.store.TenantRegistry;
-import com.example.entitlements.store.UsageHistoryStore;
-import com.example.entitlements.store.UsageStore;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -16,16 +17,16 @@ import java.util.NoSuchElementException;
 @Service
 public class UsageService {
     private final TenantRegistry registry;
-    private final UsageStore usageStore;
+    private final UsageRepository usageStore;
     private final EntitlementResolver resolver;
-    private final UsageHistoryStore historyStore;
+    private final UsageHistoryRepository historyStore;
     private final Clock clock;
 
     public UsageService(
             TenantRegistry registry,
-            UsageStore usageStore,
+            UsageRepository usageStore,
             EntitlementResolver resolver,
-            UsageHistoryStore historyStore,
+            UsageHistoryRepository historyStore,
             Clock clock
     ) {
         this.registry = registry;
@@ -35,6 +36,7 @@ public class UsageService {
         this.clock = clock;
     }
 
+    @Transactional
     public ConsumptionResult consume(ConsumptionRequest request) {
         if (request.amount() == null || request.amount().signum() <= 0) {
             throw new IllegalArgumentException("consumption amount must be positive");
@@ -50,7 +52,7 @@ public class UsageService {
                 throw new IllegalArgumentException("only QUOTA entitlements are consumable");
             }
 
-            Usage usage = currentUsage(resolved.grant().id(), quota, Instant.now(clock));
+            Usage usage = currentUsage(tenant.getId(), resolved.grant().id(), quota, Instant.now(clock), true);
             BigDecimal remainingBefore = quota.limit().subtract(usage.getConsumed());
             if (request.amount().compareTo(remainingBefore) > 0) {
                 return new ConsumptionResult(false, "quota exceeded", resolved.grant().id(), resolved.source(),
@@ -59,6 +61,7 @@ public class UsageService {
             }
 
             usage.add(request.amount());
+            usageStore.save(tenant.getId(), usage);
             Resource resource = tenant.getResources().get(request.resourceId());
             Instant occurredAt = Instant.now(clock);
             historyStore.addToBucket(
@@ -81,27 +84,43 @@ public class UsageService {
         }
     }
 
-    public BigDecimal remaining(EntitlementGrant grant) {
+    public BigDecimal remaining(String tenantId, EntitlementGrant grant) {
         if (!(grant.value() instanceof QuotaValue quota)) return null;
-        Usage usage = currentUsage(grant.id(), quota, Instant.now(clock));
+        Usage usage = peekUsage(tenantId, grant.id(), quota, Instant.now(clock));
         return quota.limit().subtract(usage.getConsumed());
     }
 
     public Usage currentUsage(String grantId, QuotaValue quota, Instant now) {
+        return currentUsage(null, grantId, quota, now, false);
+    }
+
+    Usage currentUsage(String tenantId, String grantId, QuotaValue quota, Instant now, boolean lock) {
         QuotaWindow window = QuotaWindow.forInstant(now, quota.period());
-        Usage existing = usageStore.get(grantId);
+        Usage existing = lock ? usageStore.lock(tenantId, grantId) : usageStore.get(tenantId, grantId);
         if (existing == null) {
             Usage created = new Usage(grantId, BigDecimal.ZERO, window.start(), window.end());
-            usageStore.put(grantId, created);
+            if (lock) usageStore.save(tenantId, created);
             return created;
         }
         if (!existing.getPeriodStart().equals(window.start()) || !existing.getPeriodEnd().equals(window.end())) {
             existing.reset(window.start(), window.end());
+            if (lock) usageStore.save(tenantId, existing);
         }
         return existing;
     }
 
-    public void removeUsage(String grantId) {
-        usageStore.remove(grantId);
+    private Usage peekUsage(String tenantId, String grantId, QuotaValue quota, Instant now) {
+        QuotaWindow window = QuotaWindow.forInstant(now, quota.period());
+        Usage existing = usageStore.get(tenantId, grantId);
+        if (existing == null
+                || !existing.getPeriodStart().equals(window.start())
+                || !existing.getPeriodEnd().equals(window.end())) {
+            return new Usage(grantId, BigDecimal.ZERO, window.start(), window.end());
+        }
+        return existing;
+    }
+
+    public void removeUsage(String tenantId, String grantId) {
+        usageStore.remove(tenantId, grantId);
     }
 }

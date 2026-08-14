@@ -57,7 +57,7 @@ public class EntitlementService {
             allowed = requested == null || requested.isNull() || numeric(requested).compareTo(quantity.value()) <= 0;
             reason = allowed ? "within quantity limit" : "quantity limit exceeded";
         } else if (value instanceof QuotaValue) {
-            remaining = usageService.remaining(resolved.grant());
+            remaining = usageService.remaining(request.tenantId(), resolved.grant());
             BigDecimal amount = requested == null || requested.isNull() ? BigDecimal.ONE : numeric(requested);
             allowed = amount.signum() >= 0 && amount.compareTo(remaining) <= 0;
             reason = allowed ? "within remaining quota" : "quota exceeded";

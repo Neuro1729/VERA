@@ -1,8 +1,8 @@
 package com.example.entitlements.service;
 
 import com.example.entitlements.domain.*;
+import com.example.entitlements.persistence.UsageRepository;
 import com.example.entitlements.store.TenantRegistry;
-import com.example.entitlements.store.UsageStore;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -17,7 +17,7 @@ public class ResourceDistributionService {
 
     public ResourceDistributionService(
             TenantRegistry registry,
-            UsageStore usageStore,
+            UsageRepository usageStore,
             RateLimitService rateLimitService,
             Clock clock
     ) {

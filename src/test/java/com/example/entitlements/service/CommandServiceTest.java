@@ -6,6 +6,7 @@ import com.example.entitlements.cache.ResolutionKey;
 import com.example.entitlements.domain.*;
 import com.example.entitlements.request.CommandRequest;
 import com.example.entitlements.request.CommandType;
+import com.example.entitlements.store.EntitlementHistoryStore;
 import com.example.entitlements.store.TenantRegistry;
 import com.example.entitlements.store.UsageStore;
 import com.example.entitlements.testutil.TestFixtures;
@@ -38,7 +39,9 @@ class CommandServiceTest {
         ResolutionCacheInvalidator invalidator = new ResolutionCacheInvalidator(cache);
         EntitlementResolver entitlementResolver = new EntitlementResolver(cache);
         RateLimitService rateLimitService = new RateLimitService(registry, entitlementResolver, java.time.Clock.systemUTC());
-        service = new CommandService(registry, usageStore, mapper, cache, invalidator, rateLimitService);
+        EntitlementHistoryService historyService = new EntitlementHistoryService(
+                registry, new EntitlementHistoryStore(), java.time.Clock.systemUTC());
+        service = new CommandService(registry, usageStore, mapper, cache, invalidator, rateLimitService, historyService);
         resolver = entitlementResolver;
     }
 

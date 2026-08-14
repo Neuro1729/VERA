@@ -21,6 +21,7 @@ public class CommandService {
     private final GrantResolutionCache cache;
     private final ResolutionCacheInvalidator invalidator;
     private final RateLimitService rateLimitService;
+    private final EntitlementHistoryService historyService;
 
     public CommandService(
             TenantRegistry registry,
@@ -28,7 +29,8 @@ public class CommandService {
             ObjectMapper objectMapper,
             GrantResolutionCache cache,
             ResolutionCacheInvalidator invalidator,
-            RateLimitService rateLimitService
+            RateLimitService rateLimitService,
+            EntitlementHistoryService historyService
     ) {
         this.registry = registry;
         this.usageStore = usageStore;
@@ -36,6 +38,7 @@ public class CommandService {
         this.cache = cache;
         this.invalidator = invalidator;
         this.rateLimitService = rateLimitService;
+        this.historyService = historyService;
     }
 
     public CommandResult execute(CommandRequest request) {
@@ -228,6 +231,9 @@ public class CommandService {
         ModelValidation.validateGrant(tenant, grant);
 
         EntitlementGrant existing = ModelValidation.findExactGrant(tenant, grant.target(), grant.resourceId(), grant.entitlementKey());
+        boolean unchanged = existing != null
+                && existing.id().equals(grant.id())
+                && Objects.equals(existing.value(), grant.value());
         boolean preservedRuntime = false;
         if (existing != null) {
             boolean sameId = existing.id().equals(grant.id());
@@ -249,6 +255,13 @@ public class CommandService {
             rateLimitService.removeBucket(tenant.getId(), grant.id());
         }
         invalidateEntitlementTarget(tenant, grant.target(), grant.resourceId(), grant.entitlementKey());
+        if (!unchanged) {
+            if (existing == null) {
+                historyService.recordCreated(tenant.getId(), grant);
+            } else {
+                historyService.recordUpdated(tenant.getId(), existing, grant);
+            }
+        }
         return ok(existing == null ? "entitlement created: " + grant.id() : "entitlement replaced: " + grant.id());
     }
 
@@ -261,9 +274,10 @@ public class CommandService {
     }
 
     private void purgeGrant(Tenant tenant, String grantId) {
-        tenant.removeGrant(grantId);
+        Optional<EntitlementGrant> removed = tenant.removeGrant(grantId);
         usageStore.remove(grantId);
         rateLimitService.removeBucket(tenant.getId(), grantId);
+        removed.ifPresent(grant -> historyService.recordRemoved(tenant.getId(), grant));
     }
 
     /**

@@ -7,6 +7,7 @@ import com.example.entitlements.domain.*;
 import com.example.entitlements.request.CommandRequest;
 import com.example.entitlements.request.CommandType;
 import com.example.entitlements.request.ConsumptionRequest;
+import com.example.entitlements.store.EntitlementHistoryStore;
 import com.example.entitlements.store.TenantRegistry;
 import com.example.entitlements.store.UsageStore;
 import com.example.entitlements.testutil.MutableClock;
@@ -51,7 +52,8 @@ class ResourceDistributionServiceTest {
         distributionService = new ResourceDistributionService(registry, usageStore, rateLimitService, clock);
         mapper = new ObjectMapper().findAndRegisterModules();
         commandService = new CommandService(
-                registry, usageStore, mapper, cache, new ResolutionCacheInvalidator(cache), rateLimitService);
+                registry, usageStore, mapper, cache, new ResolutionCacheInvalidator(cache), rateLimitService,
+                new EntitlementHistoryService(registry, new EntitlementHistoryStore(), clock));
         usageService = new UsageService(registry, usageStore, resolver, clock);
         seedGpuDistributionFixture();
     }

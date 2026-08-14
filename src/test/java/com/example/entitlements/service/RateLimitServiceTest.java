@@ -8,6 +8,7 @@ import com.example.entitlements.request.CommandRequest;
 import com.example.entitlements.request.CommandType;
 import com.example.entitlements.request.RateLimitRequest;
 import com.example.entitlements.request.RateLimitResult;
+import com.example.entitlements.store.EntitlementHistoryStore;
 import com.example.entitlements.store.TenantRegistry;
 import com.example.entitlements.store.UsageStore;
 import com.example.entitlements.testutil.MutableClock;
@@ -52,7 +53,8 @@ class RateLimitServiceTest {
                 new ObjectMapper().findAndRegisterModules(),
                 cache,
                 new ResolutionCacheInvalidator(cache),
-                rateLimitService);
+                rateLimitService,
+                new EntitlementHistoryService(registry, new EntitlementHistoryStore(), clock));
         mapper = new ObjectMapper().findAndRegisterModules();
     }
 

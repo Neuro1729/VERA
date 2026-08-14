@@ -5,6 +5,7 @@ import com.example.entitlements.request.*;
 import com.example.entitlements.store.TenantRegistry;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -12,9 +13,11 @@ import java.util.UUID;
 @Service
 public class RegistrationService {
     private final TenantRegistry registry;
+    private final EntitlementHistoryService historyService;
 
-    public RegistrationService(TenantRegistry registry) {
+    public RegistrationService(TenantRegistry registry, EntitlementHistoryService historyService) {
         this.registry = registry;
+        this.historyService = historyService;
     }
 
     public Tenant register(RegistrationRequest request) {
@@ -32,6 +35,7 @@ public class RegistrationService {
             }
         }
 
+        List<EntitlementGrant> created = new ArrayList<>();
         for (GrantInput input : safe(request.grants())) {
             String id = input.id() == null || input.id().isBlank() ? UUID.randomUUID().toString() : input.id();
             EntitlementGrant grant = new EntitlementGrant(id, input.target(), input.resourceId(), input.entitlementKey(), input.value());
@@ -43,9 +47,13 @@ public class RegistrationService {
                 throw new IllegalArgumentException("duplicate grant id: " + grant.id());
             }
             tenant.putGrant(grant);
+            created.add(grant);
         }
 
         registry.register(tenant);
+        for (EntitlementGrant grant : created) {
+            historyService.recordCreated(tenant.getId(), grant);
+        }
         return tenant;
     }
 

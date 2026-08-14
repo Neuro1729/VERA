@@ -5,6 +5,7 @@ import com.example.entitlements.request.ConsumptionRequest;
 import com.example.entitlements.request.EvaluationRequest;
 import com.example.entitlements.request.RateLimitRequest;
 import com.example.entitlements.service.RateLimitService;
+import com.example.entitlements.store.EntitlementHistoryStore;
 import com.example.entitlements.store.TenantRegistry;
 import com.example.entitlements.store.UsageStore;
 import com.example.entitlements.testutil.TestFixtures;
@@ -19,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -30,12 +32,14 @@ class ApiIntegrationTest {
     @Autowired TenantRegistry registry;
     @Autowired UsageStore usageStore;
     @Autowired RateLimitService rateLimitService;
+    @Autowired EntitlementHistoryStore historyStore;
 
     @BeforeEach
     void setUp() throws Exception {
         registry.clear();
         usageStore.clear();
         rateLimitService.clear();
+        historyStore.clear();
         mockMvc.perform(post("/api/tenants/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsBytes(TestFixtures.registration())))
@@ -242,6 +246,53 @@ class ApiIntegrationTest {
         mockMvc.perform(get("/api/tenants/missing/resources/gpu/live"))
                 .andExpect(status().isNotFound());
         mockMvc.perform(get("/api/tenants/acme/resources/missing/live"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void entitlementHistoryEndpointReturnsAllKeysAndCreatedEvents() throws Exception {
+        mockMvc.perform(get("/api/tenants/acme/resources/gpu/entitlement-history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resourceId").value("gpu"))
+                .andExpect(jsonPath("$.resourceName").value("GPU Cluster"))
+                .andExpect(jsonPath("$.entitlements[0].entitlementKey").value("gpu.enabled"))
+                .andExpect(jsonPath("$.entitlements[0].changes").isEmpty())
+                .andExpect(jsonPath("$.entitlements[1].entitlementKey").value("gpu.hours"))
+                .andExpect(jsonPath("$.entitlements[1].changes").isEmpty());
+
+        String command = """
+                {
+                  "type":"SET_ENTITLEMENT",
+                  "tenantId":"acme",
+                  "payload":{
+                    "grantId":"g-eng-hours",
+                    "target":{"type":"SCOPE","id":"engineering"},
+                    "resourceId":"gpu",
+                    "entitlementKey":"gpu.hours",
+                    "value":{"type":"QUOTA","limit":5000,"unit":"hour","period":"MONTHLY"}
+                  }
+                }
+                """;
+        mockMvc.perform(post("/api/commands").contentType(MediaType.APPLICATION_JSON).content(command))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/tenants/acme/resources/gpu/entitlement-history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.entitlements[1].changes[0].changeType").value("CREATED"))
+                .andExpect(jsonPath("$.entitlements[1].changes[0].newGrantId").value("g-eng-hours"))
+                .andExpect(jsonPath("$.entitlements[1].changes[0].previousGrantId").value(nullValue()))
+                .andExpect(jsonPath("$.entitlements[1].changes[0].oldValue").value(nullValue()))
+                .andExpect(jsonPath("$.entitlements[1].changes[0].target.id").value("engineering"))
+                .andExpect(jsonPath("$.entitlements[1].changes[0].newValue.type").value("QUOTA"))
+                .andExpect(jsonPath("$.entitlements[1].changes[0].newValue.limit").value(5000))
+                .andExpect(jsonPath("$.entitlements[0].changes").isEmpty());
+    }
+
+    @Test
+    void entitlementHistoryReturnsNotFoundForMissingTenantOrResource() throws Exception {
+        mockMvc.perform(get("/api/tenants/missing/resources/gpu/entitlement-history"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tenants/acme/resources/missing/entitlement-history"))
                 .andExpect(status().isNotFound());
     }
 

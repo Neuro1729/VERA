@@ -2,6 +2,7 @@ package com.example.entitlements.service;
 
 import com.example.entitlements.domain.*;
 import com.example.entitlements.request.*;
+import com.example.entitlements.store.EntitlementHistoryStore;
 import com.example.entitlements.store.TenantRegistry;
 import com.example.entitlements.testutil.TestFixtures;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +21,9 @@ class RegistrationServiceTest {
     @BeforeEach
     void setUp() {
         registry = new TenantRegistry();
-        service = new RegistrationService(registry);
+        service = new RegistrationService(
+                registry,
+                new EntitlementHistoryService(registry, new EntitlementHistoryStore(), java.time.Clock.systemUTC()));
     }
 
     @Test

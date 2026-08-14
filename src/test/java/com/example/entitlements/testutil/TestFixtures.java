@@ -2,10 +2,13 @@ package com.example.entitlements.testutil;
 
 import com.example.entitlements.domain.*;
 import com.example.entitlements.request.*;
+import com.example.entitlements.service.EntitlementHistoryService;
 import com.example.entitlements.service.RegistrationService;
+import com.example.entitlements.store.EntitlementHistoryStore;
 import com.example.entitlements.store.TenantRegistry;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -79,6 +82,8 @@ public final class TestFixtures {
     }
 
     public static Tenant registeredTenant(TenantRegistry registry) {
-        return new RegistrationService(registry).register(registration());
+        EntitlementHistoryService historyService = new EntitlementHistoryService(
+                registry, new EntitlementHistoryStore(), Clock.systemUTC());
+        return new RegistrationService(registry, historyService).register(registration());
     }
 }

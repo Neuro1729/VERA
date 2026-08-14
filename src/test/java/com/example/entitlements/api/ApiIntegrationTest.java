@@ -194,6 +194,57 @@ class ApiIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void resourceLiveEndpointShowsEntitledSubjectCounts() throws Exception {
+        String setEng = """
+                {
+                  "type":"SET_ENTITLEMENT",
+                  "tenantId":"acme",
+                  "payload":{
+                    "grantId":"g-eng-hours",
+                    "target":{"type":"SCOPE","id":"engineering"},
+                    "resourceId":"gpu",
+                    "entitlementKey":"gpu.hours",
+                    "value":{"type":"QUOTA","limit":5000,"unit":"hour","period":"MONTHLY"}
+                  }
+                }
+                """;
+        String setBackend = """
+                {
+                  "type":"SET_ENTITLEMENT",
+                  "tenantId":"acme",
+                  "payload":{
+                    "grantId":"g-backend-hours",
+                    "target":{"type":"SCOPE","id":"backend"},
+                    "resourceId":"gpu",
+                    "entitlementKey":"gpu.hours",
+                    "value":{"type":"QUOTA","limit":8000,"unit":"hour","period":"MONTHLY"}
+                  }
+                }
+                """;
+        mockMvc.perform(post("/api/commands").contentType(MediaType.APPLICATION_JSON).content(setEng))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/commands").contentType(MediaType.APPLICATION_JSON).content(setBackend))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/tenants/acme/resources/gpu/live"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resourceId").value("gpu"))
+                .andExpect(jsonPath("$.observedAt").exists())
+                .andExpect(jsonPath("$.entitlements[?(@.entitlementKey=='gpu.hours')].grants[?(@.grantId=='g-eng-hours')].entitledSubjectCount").value(1))
+                .andExpect(jsonPath("$.entitlements[?(@.entitlementKey=='gpu.hours')].grants[?(@.grantId=='g-backend-hours')].entitledSubjectCount").value(2))
+                .andExpect(jsonPath("$.entitlements[?(@.entitlementKey=='gpu.hours')].grants[?(@.grantId=='g-eng-hours')].active").value(true))
+                .andExpect(jsonPath("$.entitlements[?(@.entitlementKey=='gpu.hours')].grants[?(@.grantId=='g-eng-hours')].runtime.consumed").value(0));
+    }
+
+    @Test
+    void resourceLiveReturnsNotFoundForMissingTenantOrResource() throws Exception {
+        mockMvc.perform(get("/api/tenants/missing/resources/gpu/live"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tenants/acme/resources/missing/live"))
+                .andExpect(status().isNotFound());
+    }
+
     private void consume(String subject, int amount) throws Exception {
         mockMvc.perform(post("/api/entitlements/consume")
                         .contentType(MediaType.APPLICATION_JSON)

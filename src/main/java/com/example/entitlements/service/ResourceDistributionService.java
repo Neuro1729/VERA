@@ -5,17 +5,14 @@ import com.example.entitlements.store.TenantRegistry;
 import com.example.entitlements.store.UsageStore;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
 @Service
 public class ResourceDistributionService {
     private final TenantRegistry registry;
-    private final UsageStore usageStore;
-    private final RateLimitService rateLimitService;
+    private final GrantRuntime grantRuntime;
     private final Clock clock;
 
     public ResourceDistributionService(
@@ -25,8 +22,7 @@ public class ResourceDistributionService {
             Clock clock
     ) {
         this.registry = registry;
-        this.usageStore = usageStore;
-        this.rateLimitService = rateLimitService;
+        this.grantRuntime = new GrantRuntime(usageStore, rateLimitService, clock);
         this.clock = clock;
     }
 
@@ -52,6 +48,64 @@ public class ResourceDistributionService {
                     resource.name(),
                     chosen.getId(),
                     chosen.getName(),
+                    entitlements);
+        }
+    }
+
+    /**
+     * Resource-wide current snapshot: every grant on the resource, current runtime,
+     * and how many subjects currently resolve to that grant. Read-only.
+     */
+    public ResourceLiveResult live(String tenantId, String resourceId) {
+        Tenant tenant = registry.getRequired(tenantId);
+        synchronized (tenant) {
+            Resource resource = tenant.getResources().get(resourceId);
+            if (resource == null) throw new NoSuchElementException("resource not found: " + resourceId);
+
+            Map<String, Integer> entitledByGrantId = new LinkedHashMap<>();
+            for (EntitlementGrant grant : tenant.getGrants().values()) {
+                if (grant.resourceId().equals(resourceId)) {
+                    entitledByGrantId.put(grant.id(), 0);
+                }
+            }
+
+            if (tenant.getRootScopeId() != null) {
+                countEntitledSubjects(
+                        tenant,
+                        resourceId,
+                        resource.entitlementDefinitions(),
+                        tenant.getRootScopeId(),
+                        new HashMap<>(),
+                        entitledByGrantId);
+            }
+
+            List<ResourceLiveResult.EntitlementLive> entitlements = new ArrayList<>();
+            for (EntitlementDefinition definition : resource.entitlementDefinitions()) {
+                List<ResourceLiveResult.GrantLive> grants = new ArrayList<>();
+                for (EntitlementGrant grant : tenant.getGrants().values()) {
+                    if (!grant.resourceId().equals(resourceId) || !grant.entitlementKey().equals(definition.key())) {
+                        continue;
+                    }
+                    ResourceDistributionResult.RuntimeState runtime = grantRuntime.of(tenant.getId(), grant);
+                    grants.add(new ResourceLiveResult.GrantLive(
+                            grant.id(),
+                            grant.target(),
+                            grant.value(),
+                            runtime,
+                            entitledByGrantId.getOrDefault(grant.id(), 0),
+                            GrantRuntime.isCurrentlyActive(runtime)));
+                }
+                entitlements.add(new ResourceLiveResult.EntitlementLive(
+                        definition.key(),
+                        definition.name(),
+                        definition.valueType(),
+                        grants));
+            }
+
+            return new ResourceLiveResult(
+                    resource.id(),
+                    resource.name(),
+                    Instant.now(clock),
                     entitlements);
         }
     }
@@ -142,7 +196,7 @@ public class ResourceDistributionService {
                     grant.id(),
                     grant.target(),
                     grant.value(),
-                    runtimeState(tenant.getId(), grant),
+                    grantRuntime.of(tenant.getId(), grant),
                     entry.getValue()));
         }
 
@@ -153,74 +207,57 @@ public class ResourceDistributionService {
                 grantDistributions);
     }
 
-    private ResourceDistributionResult.RuntimeState runtimeState(String tenantId, EntitlementGrant grant) {
-        EntitlementValue value = grant.value();
-        Instant now = Instant.now(clock);
-        return switch (value) {
-            case QuotaValue quota -> quotaRuntime(grant.id(), quota, now);
-            case BooleanValue booleanValue -> new ResourceDistributionResult.BooleanRuntime(booleanValue.value());
-            case QuantityValue quantity -> new ResourceDistributionResult.QuantityRuntime(quantity.value(), quantity.unit());
-            case RangeValue range -> new ResourceDistributionResult.RangeRuntime(range.min(), range.max(), range.unit());
-            case TimeRangeValue timeRange -> timeRangeRuntime(timeRange, now);
-            case SetValue setValue -> new ResourceDistributionResult.SetRuntime(setValue.values());
-            case TextValue textValue -> new ResourceDistributionResult.TextRuntime(textValue.value());
-            case RateLimitValue rateLimit -> rateLimitRuntime(tenantId, grant.id(), rateLimit);
-        };
-    }
-
     /**
-     * Read-only quota view: does not create or mutate UsageStore entries.
+     * One tree walk: inherit nearest scope grant, overlay subject direct grants,
+     * increment entitled counts. Overlays are restored on backtrack.
      */
-    private ResourceDistributionResult.QuotaRuntime quotaRuntime(String grantId, QuotaValue quota, Instant now) {
-        QuotaWindow window = QuotaWindow.forInstant(now, quota.period());
-        Usage usage = usageStore.get(grantId);
-        BigDecimal consumed;
-        Instant periodStart;
-        Instant periodEnd;
-        if (usage == null
-                || !usage.getPeriodStart().equals(window.start())
-                || !usage.getPeriodEnd().equals(window.end())) {
-            consumed = BigDecimal.ZERO;
-            periodStart = window.start();
-            periodEnd = window.end();
-        } else {
-            consumed = usage.getConsumed();
-            periodStart = usage.getPeriodStart();
-            periodEnd = usage.getPeriodEnd();
-        }
-        BigDecimal remaining = quota.limit().subtract(consumed);
-        return new ResourceDistributionResult.QuotaRuntime(
-                quota.limit(),
-                quota.unit(),
-                quota.period(),
-                consumed,
-                remaining,
-                periodStart,
-                periodEnd);
-    }
-
-    private ResourceDistributionResult.TimeRangeRuntime timeRangeRuntime(TimeRangeValue timeRange, Instant now) {
-        boolean active = !now.isBefore(timeRange.from()) && now.isBefore(timeRange.until());
-        Duration remaining = active ? Duration.between(now, timeRange.until()) : Duration.ZERO;
-        return new ResourceDistributionResult.TimeRangeRuntime(
-                timeRange.from(),
-                timeRange.until(),
-                active,
-                remaining);
-    }
-
-    private ResourceDistributionResult.RateLimitRuntime rateLimitRuntime(
-            String tenantId,
-            String grantId,
-            RateLimitValue rateLimit
+    private void countEntitledSubjects(
+            Tenant tenant,
+            String resourceId,
+            List<EntitlementDefinition> definitions,
+            String scopeId,
+            Map<String, EntitlementGrant> inherited,
+            Map<String, Integer> entitledByGrantId
     ) {
-        BigDecimal available = rateLimitService.peekAvailableTokens(tenantId, grantId, rateLimit);
-        return new ResourceDistributionResult.RateLimitRuntime(
-                rateLimit.capacity(),
-                rateLimit.refillTokens(),
-                rateLimit.refillPeriod(),
-                available);
+        Scope scope = tenant.getScopes().get(scopeId);
+        if (scope == null) return;
+
+        List<Overlay> overlays = new ArrayList<>();
+        Target scopeTarget = new Target(TargetType.SCOPE, scope.getId());
+        for (EntitlementDefinition definition : definitions) {
+            Optional<EntitlementGrant> direct = tenant.findGrant(scopeTarget, resourceId, definition.key());
+            if (direct.isPresent()) {
+                overlays.add(new Overlay(definition.key(), inherited.put(definition.key(), direct.get())));
+            }
+        }
+
+        for (String subjectId : scope.getSubjectIds()) {
+            Subject subject = tenant.getSubjects().get(subjectId);
+            if (subject == null) continue;
+            Target subjectTarget = new Target(TargetType.SUBJECT, subject.getId());
+            for (EntitlementDefinition definition : definitions) {
+                EntitlementGrant winner = tenant.findGrant(subjectTarget, resourceId, definition.key())
+                        .orElse(inherited.get(definition.key()));
+                if (winner != null) {
+                    entitledByGrantId.merge(winner.id(), 1, Integer::sum);
+                }
+            }
+        }
+
+        for (String childId : scope.getChildScopeIds()) {
+            countEntitledSubjects(tenant, resourceId, definitions, childId, inherited, entitledByGrantId);
+        }
+
+        for (Overlay overlay : overlays) {
+            if (overlay.previous() == null) {
+                inherited.remove(overlay.key());
+            } else {
+                inherited.put(overlay.key(), overlay.previous());
+            }
+        }
     }
+
+    private record Overlay(String key, EntitlementGrant previous) {}
 
     private record ChildRef(String id, TargetType type, String kind, String name, Target target) {}
 }

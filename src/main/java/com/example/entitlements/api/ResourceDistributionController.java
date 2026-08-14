@@ -2,6 +2,7 @@ package com.example.entitlements.api;
 
 import com.example.entitlements.service.ResourceDistributionResult;
 import com.example.entitlements.service.ResourceDistributionService;
+import com.example.entitlements.service.ResourceLiveResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,5 +25,13 @@ public class ResourceDistributionController {
             @RequestParam String scopeId
     ) {
         return distributionService.distribute(tenantId, resourceId, scopeId);
+    }
+
+    @GetMapping("/{tenantId}/resources/{resourceId}/live")
+    public ResourceLiveResult live(
+            @PathVariable String tenantId,
+            @PathVariable String resourceId
+    ) {
+        return distributionService.live(tenantId, resourceId);
     }
 }

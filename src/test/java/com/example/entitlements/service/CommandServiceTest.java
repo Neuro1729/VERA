@@ -8,6 +8,7 @@ import com.example.entitlements.request.CommandRequest;
 import com.example.entitlements.request.CommandType;
 import com.example.entitlements.store.EntitlementHistoryStore;
 import com.example.entitlements.store.TenantRegistry;
+import com.example.entitlements.store.UsageHistoryStore;
 import com.example.entitlements.store.UsageStore;
 import com.example.entitlements.testutil.TestFixtures;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,7 +39,8 @@ class CommandServiceTest {
         cache = new GrantResolutionCache();
         ResolutionCacheInvalidator invalidator = new ResolutionCacheInvalidator(cache);
         EntitlementResolver entitlementResolver = new EntitlementResolver(cache);
-        RateLimitService rateLimitService = new RateLimitService(registry, entitlementResolver, java.time.Clock.systemUTC());
+        RateLimitService rateLimitService = new RateLimitService(
+                registry, entitlementResolver, new UsageHistoryStore(), java.time.Clock.systemUTC());
         EntitlementHistoryService historyService = new EntitlementHistoryService(
                 registry, new EntitlementHistoryStore(), java.time.Clock.systemUTC());
         service = new CommandService(registry, usageStore, mapper, cache, invalidator, rateLimitService, historyService);

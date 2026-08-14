@@ -4,6 +4,7 @@ import com.example.entitlements.domain.*;
 import com.example.entitlements.request.ConsumptionRequest;
 import com.example.entitlements.request.ConsumptionResult;
 import com.example.entitlements.store.TenantRegistry;
+import com.example.entitlements.store.UsageHistoryStore;
 import com.example.entitlements.store.UsageStore;
 import org.springframework.stereotype.Service;
 
@@ -17,12 +18,20 @@ public class UsageService {
     private final TenantRegistry registry;
     private final UsageStore usageStore;
     private final EntitlementResolver resolver;
+    private final UsageHistoryStore historyStore;
     private final Clock clock;
 
-    public UsageService(TenantRegistry registry, UsageStore usageStore, EntitlementResolver resolver, Clock clock) {
+    public UsageService(
+            TenantRegistry registry,
+            UsageStore usageStore,
+            EntitlementResolver resolver,
+            UsageHistoryStore historyStore,
+            Clock clock
+    ) {
         this.registry = registry;
         this.usageStore = usageStore;
         this.resolver = resolver;
+        this.historyStore = historyStore;
         this.clock = clock;
     }
 
@@ -50,6 +59,21 @@ public class UsageService {
             }
 
             usage.add(request.amount());
+            Resource resource = tenant.getResources().get(request.resourceId());
+            Instant occurredAt = Instant.now(clock);
+            historyStore.addToBucket(
+                    tenant.getId(),
+                    request.subjectId(),
+                    UsageHistorySnapshots.subjectName(tenant, request.subjectId()),
+                    resource.id(),
+                    resource.name(),
+                    resource.kind(),
+                    request.entitlementKey(),
+                    resolved.grant().id(),
+                    resolved.source(),
+                    UsageHistorySnapshots.grantTargetName(tenant, resolved.source()),
+                    request.amount(),
+                    occurredAt);
             BigDecimal remainingAfter = quota.limit().subtract(usage.getConsumed());
             return new ConsumptionResult(true, "consumed", resolved.grant().id(), resolved.source(),
                     request.amount(), usage.getConsumed(), quota.limit(), remainingAfter,

@@ -9,6 +9,7 @@ import com.example.entitlements.request.CommandType;
 import com.example.entitlements.request.ConsumptionRequest;
 import com.example.entitlements.store.EntitlementHistoryStore;
 import com.example.entitlements.store.TenantRegistry;
+import com.example.entitlements.store.UsageHistoryStore;
 import com.example.entitlements.store.UsageStore;
 import com.example.entitlements.testutil.MutableClock;
 import com.example.entitlements.testutil.TestFixtures;
@@ -48,13 +49,13 @@ class ResourceDistributionServiceTest {
         clock = new MutableClock(Instant.parse("2026-08-14T12:00:00Z"));
         cache = new GrantResolutionCache();
         resolver = new EntitlementResolver(cache);
-        rateLimitService = new RateLimitService(registry, resolver, clock);
+        rateLimitService = new RateLimitService(registry, resolver, new UsageHistoryStore(), clock);
         distributionService = new ResourceDistributionService(registry, usageStore, rateLimitService, clock);
         mapper = new ObjectMapper().findAndRegisterModules();
         commandService = new CommandService(
                 registry, usageStore, mapper, cache, new ResolutionCacheInvalidator(cache), rateLimitService,
                 new EntitlementHistoryService(registry, new EntitlementHistoryStore(), clock));
-        usageService = new UsageService(registry, usageStore, resolver, clock);
+        usageService = new UsageService(registry, usageStore, resolver, new UsageHistoryStore(), clock);
         seedGpuDistributionFixture();
     }
 

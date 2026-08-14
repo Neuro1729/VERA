@@ -10,6 +10,7 @@ import com.example.entitlements.request.RegistrationRequest;
 import com.example.entitlements.request.TenantInput;
 import com.example.entitlements.store.EntitlementHistoryStore;
 import com.example.entitlements.store.TenantRegistry;
+import com.example.entitlements.store.UsageHistoryStore;
 import com.example.entitlements.store.UsageStore;
 import com.example.entitlements.testutil.MutableClock;
 import com.example.entitlements.testutil.TestFixtures;
@@ -52,7 +53,7 @@ class EntitlementHistoryServiceTest {
                 mapper,
                 cache,
                 new ResolutionCacheInvalidator(cache),
-                new RateLimitService(registry, resolver, clock),
+                new RateLimitService(registry, resolver, new UsageHistoryStore(), clock),
                 historyService);
         registrationService.register(TestFixtures.registration());
     }

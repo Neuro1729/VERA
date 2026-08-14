@@ -6,6 +6,7 @@ import com.example.entitlements.domain.*;
 import com.example.entitlements.request.ConsumptionRequest;
 import com.example.entitlements.request.ConsumptionResult;
 import com.example.entitlements.store.TenantRegistry;
+import com.example.entitlements.store.UsageHistoryStore;
 import com.example.entitlements.store.UsageStore;
 import com.example.entitlements.testutil.MutableClock;
 import com.example.entitlements.testutil.TestFixtures;
@@ -32,7 +33,7 @@ class UsageServiceTest {
         tenant = TestFixtures.registeredTenant(registry);
         clock = new MutableClock(Instant.parse("2026-08-12T12:00:00Z"));
         cache = new GrantResolutionCache();
-        service = new UsageService(registry, usageStore, new EntitlementResolver(cache), clock);
+        service = new UsageService(registry, usageStore, new EntitlementResolver(cache), new UsageHistoryStore(), clock);
     }
 
     @Test

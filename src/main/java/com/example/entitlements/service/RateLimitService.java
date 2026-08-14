@@ -4,6 +4,7 @@ import com.example.entitlements.domain.*;
 import com.example.entitlements.request.RateLimitRequest;
 import com.example.entitlements.request.RateLimitResult;
 import com.example.entitlements.store.TenantRegistry;
+import com.example.entitlements.store.UsageHistoryStore;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -22,12 +23,19 @@ public class RateLimitService {
 
     private final TenantRegistry tenantRegistry;
     private final EntitlementResolver entitlementResolver;
+    private final UsageHistoryStore historyStore;
     private final Clock clock;
     private final ConcurrentMap<String, RateLimitState> buckets = new ConcurrentHashMap<>();
 
-    public RateLimitService(TenantRegistry tenantRegistry, EntitlementResolver entitlementResolver, Clock clock) {
+    public RateLimitService(
+            TenantRegistry tenantRegistry,
+            EntitlementResolver entitlementResolver,
+            UsageHistoryStore historyStore,
+            Clock clock
+    ) {
         this.tenantRegistry = tenantRegistry;
         this.entitlementResolver = entitlementResolver;
+        this.historyStore = historyStore;
         this.clock = clock;
     }
 
@@ -55,6 +63,7 @@ public class RateLimitService {
         RateLimitState state = buckets.computeIfAbsent(
                 key, ignored -> new RateLimitState(config.capacity(), now));
 
+        RateLimitResult result;
         synchronized (state) {
             refill(state, config, Instant.now(clock));
             if (state.getAvailableTokens().compareTo(request.tokens()) < 0) {
@@ -67,7 +76,7 @@ public class RateLimitService {
                         state.getAvailableTokens());
             }
             state.setAvailableTokens(state.getAvailableTokens().subtract(request.tokens()));
-            return new RateLimitResult(
+            result = new RateLimitResult(
                     true,
                     "consumed",
                     resolved.grant().id(),
@@ -75,6 +84,22 @@ public class RateLimitService {
                     request.tokens(),
                     state.getAvailableTokens());
         }
+
+        Resource resource = tenant.getResources().get(request.resourceId());
+        historyStore.addToBucket(
+                tenant.getId(),
+                request.subjectId(),
+                UsageHistorySnapshots.subjectName(tenant, request.subjectId()),
+                resource.id(),
+                resource.name(),
+                resource.kind(),
+                request.entitlementKey(),
+                resolved.grant().id(),
+                resolved.source(),
+                UsageHistorySnapshots.grantTargetName(tenant, resolved.source()),
+                request.tokens(),
+                Instant.now(clock));
+        return result;
     }
 
     public BigDecimal availableTokens(

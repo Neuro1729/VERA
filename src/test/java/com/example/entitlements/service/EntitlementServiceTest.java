@@ -4,6 +4,7 @@ import com.example.entitlements.cache.GrantResolutionCache;
 import com.example.entitlements.request.EvaluationRequest;
 import com.example.entitlements.request.EvaluationResult;
 import com.example.entitlements.store.TenantRegistry;
+import com.example.entitlements.store.UsageHistoryStore;
 import com.example.entitlements.store.UsageStore;
 import com.example.entitlements.testutil.MutableClock;
 import com.example.entitlements.testutil.TestFixtures;
@@ -28,8 +29,8 @@ class EntitlementServiceTest {
         UsageStore usageStore = new UsageStore();
         MutableClock clock = new MutableClock(Instant.parse("2026-08-12T12:00:00Z"));
         EntitlementResolver resolver = new EntitlementResolver(new GrantResolutionCache());
-        usageService = new UsageService(registry, usageStore, resolver, clock);
-        RateLimitService rateLimitService = new RateLimitService(registry, resolver, clock);
+        usageService = new UsageService(registry, usageStore, resolver, new UsageHistoryStore(), clock);
+        RateLimitService rateLimitService = new RateLimitService(registry, resolver, new UsageHistoryStore(), clock);
         service = new EntitlementService(registry, resolver, usageService, rateLimitService, clock);
         mapper = new ObjectMapper();
     }

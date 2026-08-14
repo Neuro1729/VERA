@@ -7,6 +7,7 @@ import com.example.entitlements.request.RateLimitRequest;
 import com.example.entitlements.service.RateLimitService;
 import com.example.entitlements.store.EntitlementHistoryStore;
 import com.example.entitlements.store.TenantRegistry;
+import com.example.entitlements.store.UsageHistoryStore;
 import com.example.entitlements.store.UsageStore;
 import com.example.entitlements.testutil.TestFixtures;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,6 +34,7 @@ class ApiIntegrationTest {
     @Autowired UsageStore usageStore;
     @Autowired RateLimitService rateLimitService;
     @Autowired EntitlementHistoryStore historyStore;
+    @Autowired UsageHistoryStore usageHistoryStore;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -40,6 +42,7 @@ class ApiIntegrationTest {
         usageStore.clear();
         rateLimitService.clear();
         historyStore.clear();
+        usageHistoryStore.clear();
         mockMvc.perform(post("/api/tenants/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsBytes(TestFixtures.registration())))
@@ -293,6 +296,55 @@ class ApiIntegrationTest {
         mockMvc.perform(get("/api/tenants/missing/resources/gpu/entitlement-history"))
                 .andExpect(status().isNotFound());
         mockMvc.perform(get("/api/tenants/acme/resources/missing/entitlement-history"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void committedUseAndUsageHistoryEndpointsGroupResourceWideUsage() throws Exception {
+        consume("alice", 40);
+        String use = """
+                {
+                  "tenantId":"acme",
+                  "subjectId":"alice",
+                  "resourceId":"api",
+                  "entitlementKey":"api.models",
+                  "requestedValue":["large"]
+                }
+                """;
+        mockMvc.perform(post("/api/entitlements/use").contentType(MediaType.APPLICATION_JSON).content(use))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.allowed").value(true));
+
+        mockMvc.perform(post("/api/entitlements/evaluate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsBytes(new EvaluationRequest("acme", "alice", "api", "api.models", mapper.valueToTree("large")))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/tenants/acme/resources/api/usage-history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resourceId").value("api"))
+                .andExpect(jsonPath("$.resourceName").value("AI API"))
+                .andExpect(jsonPath("$.entitlements[0].entitlementKey").value("api.requests"))
+                .andExpect(jsonPath("$.entitlements[0].grants[0].grantId").value("g-eng-quota"))
+                .andExpect(jsonPath("$.entitlements[0].grants[0].grantTargetNameAtTime").value("Engineering"))
+                .andExpect(jsonPath("$.entitlements[0].grants[0].usage[0].type").value("BUCKET"))
+                .andExpect(jsonPath("$.entitlements[0].grants[0].usage[0].subjectId").value("alice"))
+                .andExpect(jsonPath("$.entitlements[0].grants[0].usage[0].subjectNameAtTime").value("Alice"))
+                .andExpect(jsonPath("$.entitlements[0].grants[0].usage[0].totalConsumed").value(40))
+                .andExpect(jsonPath("$.entitlements[0].grants[0].usage[0].operationCount").value(1))
+                .andExpect(jsonPath("$.entitlements[1].entitlementKey").value("api.models"))
+                .andExpect(jsonPath("$.entitlements[1].grants[0].grantTargetNameAtTime").value("Engineering"))
+                .andExpect(jsonPath("$.entitlements[1].grants[0].usage[0].type").value("EVENT"))
+                .andExpect(jsonPath("$.entitlements[1].grants[0].usage[0].subjectNameAtTime").value("Alice"))
+                .andExpect(jsonPath("$.entitlements[1].grants[0].usage[0].usedValue[0]").value("large"));
+
+        mockMvc.perform(get("/api/tenants/acme/resources/gpu/usage-history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resourceId").value("gpu"))
+                .andExpect(jsonPath("$.entitlements").isEmpty());
+        mockMvc.perform(get("/api/tenants/acme/resources/missing/usage-history"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tenants/missing/resources/api/usage-history"))
                 .andExpect(status().isNotFound());
     }
 

@@ -10,6 +10,7 @@ import com.example.entitlements.request.RateLimitRequest;
 import com.example.entitlements.request.RateLimitResult;
 import com.example.entitlements.store.EntitlementHistoryStore;
 import com.example.entitlements.store.TenantRegistry;
+import com.example.entitlements.store.UsageHistoryStore;
 import com.example.entitlements.store.UsageStore;
 import com.example.entitlements.testutil.MutableClock;
 import com.example.entitlements.testutil.TestFixtures;
@@ -46,7 +47,7 @@ class RateLimitServiceTest {
         clock = new MutableClock(Instant.parse("2026-08-12T12:00:00Z"));
         cache = new GrantResolutionCache();
         EntitlementResolver resolver = new EntitlementResolver(cache);
-        rateLimitService = new RateLimitService(registry, resolver, clock);
+        rateLimitService = new RateLimitService(registry, resolver, new UsageHistoryStore(), clock);
         commandService = new CommandService(
                 registry,
                 new UsageStore(),
@@ -281,7 +282,7 @@ class RateLimitServiceTest {
     @Test
     void existingQuotaBehaviorRemainsUnchanged() {
         UsageService usageService = new UsageService(
-                registry, new UsageStore(), new EntitlementResolver(cache), clock);
+                registry, new UsageStore(), new EntitlementResolver(cache), new UsageHistoryStore(), clock);
         var result = usageService.consume(new com.example.entitlements.request.ConsumptionRequest(
                 "acme", "alice", "api", "api.requests", new BigDecimal("100")));
         assertTrue(result.allowed());

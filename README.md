@@ -227,11 +227,11 @@ curl -sS -X POST http://localhost:8080/api/gateway/tenants/acme/evaluate \
 
 Postman/curl must send both the `XSRF-TOKEN` cookie and `X-XSRF-TOKEN` header for management mutations. Gateway calls must not use the admin session; admin calls must not use the API key.
 
-JWT, OAuth, OIDC, SAML, refresh tokens, and multiple admins per tenant are intentionally deferred.
+V1 does not include JWT, OAuth, OIDC, SAML, refresh tokens, or multiple admins per tenant.
 
 ## Company onboarding
 
-A company provides three logical JSON configurations: **organization**, **resources**, **grants**. Those can later come from a UI, API, or CLI. The backend itself is not file-oriented.
+A company provides three JSON documents: **organization**, **resources**, **grants**. The UI, HTTP API, and signup all submit the same shapes; the backend does not read config files.
 
 ```text
 three configs → preview → cross-validation → atomic register

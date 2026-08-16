@@ -28,6 +28,8 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -105,6 +107,7 @@ class EnabledSecurityConfig {
         CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
         requestHandler.setCsrfRequestAttributeName("_csrf");
         http
+                .securityMatcher("/api/**")
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(cookieCsrfTokenRepository)
                         .csrfTokenRequestHandler(requestHandler)
@@ -125,6 +128,19 @@ class EnabledSecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/tenants/register").denyAll()
                         .anyRequest().hasAuthority(VeraAuthorities.ADMIN))
                 .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class);
+        return http.build();
+    }
+
+    @Bean
+    @Order(3)
+    SecurityFilterChain spaSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher(new NegatedRequestMatcher(new AntPathRequestMatcher("/api/**")))
+                .csrf(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .logout(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         return http.build();
     }
 

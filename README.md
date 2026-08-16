@@ -85,16 +85,32 @@ npm run dev
 UI: `http://localhost:5173`  
 API proxy: `/api/*` → `http://localhost:8080`
 
-Production frontend artifact:
+Do not host the Vite app on a separate domain (Vercel/Netlify). Login uses HttpOnly `SameSite=Lax` cookies and relative `/api` calls with `credentials: "include"`. UI and API must share one HTTPS origin.
 
-```bash
-cd frontend
-npm run build
+The production Docker image builds `frontend/dist` into the JAR and Spring serves `/` plus `/api`. First start against an empty database applies Flyway migrations automatically.
+
+## Deploy (Render + Neon)
+
+1. Neon: create a Postgres database. Convert the URL to JDBC and keep `sslmode=require`:
+
+```text
+jdbc:postgresql://HOST/neondb?sslmode=require
 ```
 
-Output is `frontend/dist`. Backend unit tests do not require Node. Serve `frontend/dist` with any static host, or put a reverse proxy in front of both `/` (SPA) and `/api` (Spring Boot).
+2. Push this repo to GitHub. Render → New → Web Service → Docker → Free.
 
-First start against an empty `entitlements` database applies Flyway migrations automatically.
+3. Environment variables:
+
+| Name | Value |
+| --- | --- |
+| `SPRING_DATASOURCE_URL` | Neon JDBC URL |
+| `SPRING_DATASOURCE_USERNAME` | Neon user |
+| `SPRING_DATASOURCE_PASSWORD` | Neon password |
+| `VERA_SESSION_COOKIE_SECURE` | `true` |
+
+Local defaults stay in `application.properties` (`localhost:5432`, cookie `Secure=false`, port `8080`). Render injects `PORT`; Spring reads `server.port=${PORT:8080}`.
+
+Free Render sleeps after 15 minutes idle. Neon compute sleeps after 5 minutes. The first request after idle can take about a minute.
 
 ### Smoke the API
 

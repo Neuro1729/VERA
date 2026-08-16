@@ -1,0 +1,1 @@
+/* vera-asset-test */

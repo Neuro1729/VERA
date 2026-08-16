@@ -4,6 +4,8 @@
 
 Generic hierarchical resource-entitlement engine (Java 21 + Spring Boot 3.5).
 
+**Live:** [https://vera-233v.onrender.com/](https://vera-233v.onrender.com/) (free Render; first load after idle can take about a minute)
+
 A tenant owns recursive scopes, subjects, resources, and typed entitlement grants. Nearest grant wins (subject → current scope → parents → root). Quota and rate-limit pools belong to the **winning grant**, not the subject. PostgreSQL is the durable source of truth; unit tests stay in-memory.
 
 ## Prerequisites
@@ -90,6 +92,9 @@ Do not host the Vite app on a separate domain (Vercel/Netlify). Login uses HttpO
 The production Docker image builds `frontend/dist` into the JAR and Spring serves `/` plus `/api`. First start against an empty database applies Flyway migrations automatically.
 
 ## Deploy (Render + Neon)
+
+Current deployment: [https://vera-233v.onrender.com/](https://vera-233v.onrender.com/)
+
 
 1. Neon: create a Postgres database. Convert the URL to JDBC and keep `sslmode=require`:
 
